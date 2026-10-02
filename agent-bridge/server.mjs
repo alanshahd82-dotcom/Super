@@ -266,10 +266,42 @@ async function validateProject(touched){
   }
 }
 
+async function findHistoryRequest(requestId){
+  if(!requestId) return null;
+  const historyFull=path.join(REPO,'voice-chat','AGENT_HISTORY.jsonl');
+  const raw=await fsp.readFile(historyFull,'utf8').catch(()=>'');
+  const lines=raw.split(/\r?\n/).filter(Boolean).slice(-200).reverse();
+  for(const line of lines){
+    try{
+      const item=JSON.parse(line);
+      if(item.request_id===requestId) return item;
+    }catch{}
+  }
+  return null;
+}
+
 async function applyFiles(body){
   const files=Array.isArray(body.files)?body.files:[];
   const edits=Array.isArray(body.edits)?body.edits:[];
   if((!files.length&&!edits.length)||files.length+edits.length>16) throw new Error('invalid_changes');
+
+  const requestId=String(body.request_id||'').trim().slice(0,96);
+  if(requestId){
+    const previous=await findHistoryRequest(requestId);
+    if(previous){
+      const {stdout:head}=await git(['rev-parse','HEAD']);
+      return {
+        ok:true,
+        duplicate:true,
+        request_id:requestId,
+        publish_id:previous.publish_id||null,
+        commit:head,
+        files:previous.files||[],
+        deployed:true,
+        live_url:'https://alanshahd82-dotcom.github.io/Super/voice-chat/?request='+encodeURIComponent(requestId)
+      };
+    }
+  }
 
   const {stdout:currentHead}=await git(['rev-parse','HEAD']);
   const expectedHead=String(body.expected_head||'').trim();
@@ -339,6 +371,7 @@ async function applyFiles(body){
     }catch{}
     const memoryChange={
       at:changedAt,
+      request_id:requestId||null,
       publish_id:publishId,
       message:msg.replace(/^Agent:\s*/,''),
       files:unique,
@@ -354,6 +387,7 @@ async function applyFiles(body){
     await backup(deployRel);
     const deployFull=path.join(REPO,...deployRel.split('/'));
     await fsp.writeFile(deployFull,JSON.stringify({
+      request_id:requestId||null,
       publish_id:publishId,
       requested_at:new Date().toISOString(),
       message:msg.replace(/^Agent:\s*/,''),
@@ -367,6 +401,7 @@ async function applyFiles(body){
     const historyFull=path.join(REPO,...historyRel.split('/'));
     const historyEntry={
       at:new Date().toISOString(),
+      request_id:requestId||null,
       publish_id:publishId,
       message:msg.replace(/^Agent:\s*/,''),
       files:unique,
@@ -387,6 +422,7 @@ async function applyFiles(body){
     const deployment=await waitForPagesDeployment(publishId);
     return {
       ok:true,
+      request_id:requestId||null,
       commit:sha,
       files:unique,
       publish_id:publishId,

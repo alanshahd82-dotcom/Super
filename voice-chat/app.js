@@ -17,7 +17,44 @@ const pairErrorEl=document.querySelector('#pairError');
 const CHAT_MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
 const DEV_MODEL='onnx-community/Qwen2.5-Coder-0.5B-Instruct';
 const HISTORY_KEY='evo-chat-history-v1';
+const TASK_KEY='evo-active-agent-task-v1';
 const agentState=loadAgentState();
+
+function newTaskId(){
+  if(globalThis.crypto?.randomUUID) return crypto.randomUUID();
+  return 'task-'+Date.now()+'-'+Math.random().toString(36).slice(2,10);
+}
+
+function loadTask(){
+  try{
+    const task=JSON.parse(localStorage.getItem(TASK_KEY)||'null');
+    return task&&typeof task==='object'?task:null;
+  }catch{return null;}
+}
+
+function saveTask(task){
+  try{localStorage.setItem(TASK_KEY,JSON.stringify(task));}catch{}
+}
+
+function createTask(text){
+  const task={
+    id:newTaskId(),
+    text:String(text||''),
+    status:'running',
+    attempts:1,
+    started_at:new Date().toISOString(),
+    updated_at:new Date().toISOString()
+  };
+  saveTask(task);
+  return task;
+}
+
+function updateTask(task,patch){
+  if(!task) return null;
+  Object.assign(task,patch,{updated_at:new Date().toISOString()});
+  saveTask(task);
+  return task;
+}
 let history=[];
 try{
   const saved=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');
@@ -257,7 +294,7 @@ function collectRepoTargets(patches,writes){
   ].filter(Boolean))].slice(0,9);
 }
 
-async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,visible){
+async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,visible,requestId){
   let currentPatches=[...patches];
   let currentWrites=[...writes];
   let currentHead=head;
@@ -269,7 +306,13 @@ async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,vi
     const message=[...currentPatches,...currentWrites].map(a=>a.message).find(Boolean)||'self update';
     try{
       setStatus(attempt?'يعيد الاختبار والنشر…':'يختبر وينشر…');
-      const result=await bridgeApply({message,edits,files,expected_head:currentHead});
+      const result=await bridgeApply({
+        message,
+        edits,
+        files,
+        expected_head:currentHead,
+        request_id:requestId||null
+      });
       return {result,visible:currentVisible};
     }catch(e){
       const reason=e?.message||String(e);
@@ -299,10 +342,12 @@ async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,vi
   throw new Error('auto_repair_failed');
 }
 
-async function executeAgentPlan(parsed,modelMessages,userText){
+async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
   let actions=[...parsed.actions];
   let visible=parsed.clean;
   const notes=[];
+  let executed=false;
+  let executionMeta={};
   const rollbackIntent=looksLikeRollbackRequest(userText);
   const devIntent=looksLikeDevelopmentRequest(userText)||rollbackIntent;
   let lastRepoHead=null;
@@ -390,6 +435,7 @@ async function executeAgentPlan(parsed,modelMessages,userText){
 
   const localActions=actions.filter(a=>!isRepoAction(a));
   const localApplied=applyAgentActions(agentState,localActions,{chat,input,titleEl});
+  if(localApplied.length) executed=true;
   notes.push(...localApplied);
 
   const repoPatches=actions.filter(a=>a?.type==='repo_patch');
@@ -408,8 +454,11 @@ async function executeAgentPlan(parsed,modelMessages,userText){
         setStatus('يتراجع عن آخر تغيير للوكيل…');
         result=await bridgeRollback(lastRepoHead);
         if(result.no_changes){
+          executed=true;
           notes.push('لا يوجد تغيير فعلي للتراجع عنه.');
         }else if(result.commit){
+          executed=true;
+          executionMeta={commit:result.commit,rolled_back:result.rolled_back||null};
           notes.push('تم التراجع عن التغيير '+String(result.rolled_back||'').slice(0,7)+' في Commit جديد: '+result.commit.slice(0,7));
         }
       }else{
@@ -418,13 +467,21 @@ async function executeAgentPlan(parsed,modelMessages,userText){
           repoWrites,
           lastRepoHead,
           workingMessages,
-          visible
+          visible,
+          taskId
         );
         result=applied.result;
         if(applied.visible) visible=applied.visible;
         if(result.no_changes){
+          executed=true;
           notes.push('لم تكن هناك تغييرات جديدة للنشر.');
+        }else if(result.duplicate){
+          executed=true;
+          executionMeta={commit:result.commit||null,duplicate:true,request_id:result.request_id||taskId||null};
+          notes.push('هذه المهمة سبق تنفيذها؛ تم منع تكرار نفس التعديل.');
         }else if(result.commit){
+          executed=true;
+          executionMeta={commit:result.commit,request_id:result.request_id||taskId||null};
           notes.push('تم الاختبار ورفع التعديل إلى GitHub: '+result.commit.slice(0,7));
         }
       }
@@ -438,16 +495,36 @@ async function executeAgentPlan(parsed,modelMessages,userText){
     notes.push('أعاد الوكيل التخطيط تلقائيًا، لكنه لم ينتج تعديلًا صالحًا؛ لذلك لم يغيّر المشروع.');
   }
 
-  return {visible:(visible||'').trim(),notes};
+  return {visible:(visible||'').trim(),notes,executed,executionMeta};
 }
 
-async function submit(){
-  const text=input.value.trim();
+async function submit(options={}){
+  const resumeTask=options?.resumeTask&&typeof options.resumeTask==='object'?options.resumeTask:null;
+  const text=String(resumeTask?.text??input.value).trim();
   if(!text||busy||!ready)return;
 
-  history.push({role:'user',content:text});
-  saveHistory();
-  add('user',text);
+  const devMode=looksLikeDevelopmentRequest(text)||looksLikeRollbackRequest(text);
+  let task=null;
+  if(devMode){
+    task=resumeTask||createTask(text);
+    if(resumeTask){
+      updateTask(task,{
+        status:'running',
+        attempts:Number(task.attempts||0)+1,
+        resumed_at:new Date().toISOString()
+      });
+    }
+  }
+
+  const lastUser=[...history].reverse().find(x=>x.role==='user');
+  if(!resumeTask||lastUser?.content!==text){
+    history.push({role:'user',content:text});
+    saveHistory();
+    add('user',text);
+  }else{
+    add('assistant','أستأنف مهمة التطوير التي توقفت قبل اكتمالها…');
+  }
+
   input.value='';
   resize();
   setBusy(true);
@@ -459,10 +536,10 @@ async function submit(){
       {role:'system',content:buildAgentSystem(agentState)},
       ...history.slice(-12)
     ];
-    const mode=(looksLikeDevelopmentRequest(text)||looksLikeRollbackRequest(text))?'dev':'chat';
+    const mode=devMode?'dev':'chat';
     const answer=await generateText(modelMessages,520,mode);
     const parsed=await recoverInitialPlan(text,modelMessages,answer);
-    const result=await executeAgentPlan(parsed,modelMessages,text);
+    const result=await executeAgentPlan(parsed,modelMessages,text,task?.id||null);
     const parts=[];
     if(result.visible) parts.push(result.visible);
     if(result.notes.length) parts.push(result.notes.join('\n'));
@@ -471,9 +548,25 @@ async function submit(){
     saveHistory();
     add('assistant',visible);
     speak(visible);
+
+    if(task){
+      updateTask(task,{
+        status:result.executed?'completed':'blocked',
+        completed_at:result.executed?new Date().toISOString():null,
+        execution:result.executionMeta||{},
+        last_message:visible.slice(0,1500)
+      });
+    }
     setStatus('جاهز');
   }catch(e){
-    add('assistant','تعذر التنفيذ: '+(e?.message||String(e)));
+    const message=e?.message||String(e);
+    if(task){
+      updateTask(task,{
+        status:'failed',
+        error:message.slice(0,1000)
+      });
+    }
+    add('assistant','تعذر التنفيذ: '+message);
     setStatus('خطأ');
   }finally{
     setBusy(false);
@@ -549,6 +642,21 @@ if('serviceWorker' in navigator){
   addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 }
 
+function resumeInterruptedTask(){
+  const task=loadTask();
+  if(!task||task.status!=='running'||!task.text) return;
+  const updated=Date.parse(task.updated_at||task.started_at||0);
+  if(!Number.isFinite(updated)||Date.now()-updated>6*60*60*1000) return;
+  if(Number(task.attempts||0)>=3){
+    updateTask(task,{status:'blocked',error:'resume_attempt_limit'});
+    return;
+  }
+  setTimeout(()=>{
+    if(!busy) submit({resumeTask:task});
+  },1200);
+}
+
 setBusy(false);
 setStatus('جاهز — العقل يعمل عند الطلب');
 input.focus();
+resumeInterruptedTask();
