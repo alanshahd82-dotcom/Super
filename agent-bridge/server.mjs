@@ -479,7 +479,7 @@ async function rollbackLatestAgentChange(body){
       rollback_of:target
     },null,2)+'\n','utf8');
 
-    await git(['add','--',...new Set([...touched,memoryRel,historyRel,deployRel])]);
+    await git(['add','-A','--','voice-chat']);
     await git(['commit','-m','Agent: rollback '+target.slice(0,7)]);
     committed=true;
     const {stdout:sha}=await git(['rev-parse','HEAD']);
