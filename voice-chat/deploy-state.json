@@ -1,10 +1,10 @@
 {
-  "request_id": "verify-idempotency-20261002-v1",
-  "publish_id": "e6db588ff549c5f5eb2c9d6f",
-  "requested_at": "2026-10-02T19:29:05.867Z",
-  "message": "verify resumable idempotent agent tasks",
+  "request_id": "document-idempotency-proof-20261002-v1",
+  "publish_id": "45c1f5217a2892b5b2c1c634",
+  "requested_at": "2026-10-02T19:31:02.709Z",
+  "message": "document resumable idempotent task verification",
   "files": [
-    "voice-chat/agent-capabilities.json"
+    "voice-chat/PROJECT_CONTEXT.md"
   ],
-  "base": "f4b0bc7e19e01e519a066de37f54c300489e9e00"
+  "base": "851e98999c6e1e3349419ee0aa3ca3a1c5c0adfc"
 }

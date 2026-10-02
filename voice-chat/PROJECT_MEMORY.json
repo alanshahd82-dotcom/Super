@@ -33,9 +33,19 @@
         "voice-chat/agent-capabilities.json"
       ],
       "base": "f4b0bc7e19e01e519a066de37f54c300489e9e00"
+    },
+    {
+      "at": "2026-10-02T19:31:02.436Z",
+      "request_id": "document-idempotency-proof-20261002-v1",
+      "publish_id": "45c1f5217a2892b5b2c1c634",
+      "message": "document resumable idempotent task verification",
+      "files": [
+        "voice-chat/PROJECT_CONTEXT.md"
+      ],
+      "base": "851e98999c6e1e3349419ee0aa3ca3a1c5c0adfc"
     }
   ],
-  "updated_at": "2026-10-02T19:29:05.594Z",
+  "updated_at": "2026-10-02T19:31:02.436Z",
   "goal": "PWA chat that can understand user development requests, inspect its own repository, modify itself, test, publish to GitHub Pages, and keep project context without requiring the user to edit code.",
   "constraints": [
     "0 MAD basic operating cost",
@@ -44,13 +54,13 @@
     "preserve PROJECT_CONTEXT.md as the canonical handoff"
   ],
   "last_change": {
-    "at": "2026-10-02T19:29:05.594Z",
-    "request_id": "verify-idempotency-20261002-v1",
-    "publish_id": "e6db588ff549c5f5eb2c9d6f",
-    "message": "verify resumable idempotent agent tasks",
+    "at": "2026-10-02T19:31:02.436Z",
+    "request_id": "document-idempotency-proof-20261002-v1",
+    "publish_id": "45c1f5217a2892b5b2c1c634",
+    "message": "document resumable idempotent task verification",
     "files": [
-      "voice-chat/agent-capabilities.json"
+      "voice-chat/PROJECT_CONTEXT.md"
     ],
-    "base": "f4b0bc7e19e01e519a066de37f54c300489e9e00"
+    "base": "851e98999c6e1e3349419ee0aa3ca3a1c5c0adfc"
   }
 }

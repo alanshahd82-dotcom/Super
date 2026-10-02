@@ -155,6 +155,12 @@ agent.js يدعم حالياً:
 Agent discovery -> repo_tree/repo_search/repo_context -> تعديل -> فحوصات أمان -> Commit -> Push -> GitHub Pages -> تحقق من وصول النسخة الحية.
 
 أحدث إثبات:
+- 851e989 — تحقق أن request_id يمنع تنفيذ نفس مهمة التطوير مرتين بعد إعادة المحاولة.
+- resumable task state: PASS.
+- duplicate/idempotency guard: PASS.
+- dual local model router: ACTIVE (chat model + coder model).
+
+إثبات إضافي:
 - 425448c — تحقق من secret guard و stale HEAD guard و lazy model architecture.
 - secret guard: PASS
 - stale HEAD guard: PASS
