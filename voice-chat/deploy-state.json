@@ -1,13 +1,10 @@
 {
-  "publish_id": "6265a8de1daf84ab5cb01566",
-  "requested_at": "2026-10-02T18:10:08.730Z",
-  "message": "rollback 17c4c03",
+  "request_id": "verify-idempotency-20261002-v1",
+  "publish_id": "e6db588ff549c5f5eb2c9d6f",
+  "requested_at": "2026-10-02T19:29:05.867Z",
+  "message": "verify resumable idempotent agent tasks",
   "files": [
-    "voice-chat/AGENT_HISTORY.jsonl",
-    "voice-chat/PROJECT_MEMORY.json",
-    "voice-chat/deploy-state.json",
-    "voice-chat/rollback-probe.txt"
+    "voice-chat/agent-capabilities.json"
   ],
-  "base": "04d186d15f15a286c654010e06ea3d38a68eefc9",
-  "rollback_of": "17c4c037c360790df7ffa51663349f50720c8833"
+  "base": "f4b0bc7e19e01e519a066de37f54c300489e9e00"
 }
