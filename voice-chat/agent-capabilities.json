@@ -10,7 +10,11 @@
   ],
   "optimistic_head_guard": true,
   "automatic_change_history": true,
-  "verified_at": "2026-10-02T16:43:56.867Z",
+  "verified_at": "2026-10-02T16:53:26.030Z",
   "live_deployment_confirmation": true,
-  "discovery_loop_verified": true
+  "discovery_loop_verified": true,
+  "safety_validation_verified": true,
+  "secret_guard_verified": true,
+  "stale_head_guard_verified": true,
+  "lazy_model_loading": true
 }
