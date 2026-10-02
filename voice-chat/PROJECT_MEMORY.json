@@ -10,9 +10,22 @@
         "voice-chat/rollback-probe.txt"
       ],
       "base": "f76c16288fbcd824daa903a7cf68eeb5b9b63923"
+    },
+    {
+      "at": "2026-10-02T18:10:08.730Z",
+      "publish_id": "6265a8de1daf84ab5cb01566",
+      "message": "rollback 17c4c03",
+      "files": [
+        "voice-chat/AGENT_HISTORY.jsonl",
+        "voice-chat/PROJECT_MEMORY.json",
+        "voice-chat/deploy-state.json",
+        "voice-chat/rollback-probe.txt"
+      ],
+      "base": "04d186d15f15a286c654010e06ea3d38a68eefc9",
+      "rollback_of": "17c4c037c360790df7ffa51663349f50720c8833"
     }
   ],
-  "updated_at": "2026-10-02T18:03:09.638Z",
+  "updated_at": "2026-10-02T18:10:08.730Z",
   "goal": "PWA chat that can understand user development requests, inspect its own repository, modify itself, test, publish to GitHub Pages, and keep project context without requiring the user to edit code.",
   "constraints": [
     "0 MAD basic operating cost",
@@ -21,12 +34,16 @@
     "preserve PROJECT_CONTEXT.md as the canonical handoff"
   ],
   "last_change": {
-    "at": "2026-10-02T18:03:09.638Z",
-    "publish_id": "ac84163b2fb2b465b50ea700",
-    "message": "rollback integration probe",
+    "at": "2026-10-02T18:10:08.730Z",
+    "publish_id": "6265a8de1daf84ab5cb01566",
+    "message": "rollback 17c4c03",
     "files": [
+      "voice-chat/AGENT_HISTORY.jsonl",
+      "voice-chat/PROJECT_MEMORY.json",
+      "voice-chat/deploy-state.json",
       "voice-chat/rollback-probe.txt"
     ],
-    "base": "f76c16288fbcd824daa903a7cf68eeb5b9b63923"
+    "base": "04d186d15f15a286c654010e06ea3d38a68eefc9",
+    "rollback_of": "17c4c037c360790df7ffa51663349f50720c8833"
   }
 }

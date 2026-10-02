@@ -1,9 +1,13 @@
 {
-  "publish_id": "ac84163b2fb2b465b50ea700",
-  "requested_at": "2026-10-02T18:03:09.852Z",
-  "message": "rollback integration probe",
+  "publish_id": "6265a8de1daf84ab5cb01566",
+  "requested_at": "2026-10-02T18:10:08.730Z",
+  "message": "rollback 17c4c03",
   "files": [
+    "voice-chat/AGENT_HISTORY.jsonl",
+    "voice-chat/PROJECT_MEMORY.json",
+    "voice-chat/deploy-state.json",
     "voice-chat/rollback-probe.txt"
   ],
-  "base": "f76c16288fbcd824daa903a7cf68eeb5b9b63923"
+  "base": "04d186d15f15a286c654010e06ea3d38a68eefc9",
+  "rollback_of": "17c4c037c360790df7ffa51663349f50720c8833"
 }
