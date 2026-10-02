@@ -235,8 +235,9 @@ function scheduleModelUnload(){
 async function generateText(messages,maxNewTokens=520,mode='chat'){
   if(hasBridgeToken()){
     try{
-      if(!bridgeOnline) await refreshBridge();
-      if(bridgeOnline){
+      const state=await bridgeHealth();
+      setBridgeBadge(state.online,hasBridgeToken());
+      if(state.online&&state.pc_inference?.[mode]===true){
         setStatus(mode==='dev'?'يفكر عقل البرمجة على الحاسوب…':'يفكر على الحاسوب…');
         const remote=await bridgeGenerate(messages,maxNewTokens,mode);
         if(remote?.text) return String(remote.text).trim();

@@ -38,6 +38,12 @@ let modelModulePromise=null;
 let modelIdleTimer=null;
 let inferenceQueue=Promise.resolve();
 
+async function modelCacheReady(modelId){
+  const file=path.join(RUNTIME,'models',...String(modelId).split('/'),'onnx','model_int8.onnx');
+  const stat=await fsp.stat(file).catch(()=>null);
+  return !!stat&&stat.isFile()&&stat.size>100000000;
+}
+
 async function getTransformers(){
   if(!modelModulePromise){
     modelModulePromise=import('@huggingface/transformers').then(mod=>{
@@ -651,7 +657,15 @@ const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
   try{
     if(req.method==='GET'&&url.pathname==='/health'){
-      json(res,200,{ok:true,service:'super-agent-bridge',pairing:true},origin);
+      json(res,200,{
+        ok:true,
+        service:'super-agent-bridge',
+        pairing:true,
+        pc_inference:{
+          chat:await modelCacheReady(CHAT_MODEL),
+          dev:await modelCacheReady(DEV_MODEL)
+        }
+      },origin);
       return;
     }
 
