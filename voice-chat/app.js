@@ -1,5 +1,5 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, looksLikeDevelopmentRequest, buildRecoveryInstruction } from './agent.js?v=20261002-6';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, looksLikeDevelopmentRequest, buildRecoveryInstruction } from './agent.js?v=20261002-7';
 import { bridgeHealth, pairBridge, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, hasBridgeToken } from './bridge.js?v=20261002-2';
 
 const chat=document.querySelector('#chat');
@@ -263,6 +263,7 @@ async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,vi
       setStatus('يصحح التعديل تلقائيًا…');
       const ctx=await bridgeContext([
         'voice-chat/PROJECT_CONTEXT.md',
+        'voice-chat/PROJECT_MEMORY.json',
         ...collectRepoTargets(currentPatches,currentWrites)
       ]);
       currentHead=ctx.head;
@@ -302,7 +303,7 @@ async function executeAgentPlan(parsed,modelMessages,userText){
       ].filter(Boolean);
       readActions=[{
         type:'repo_context',
-        paths:['voice-chat/PROJECT_CONTEXT.md',...targets]
+        paths:['voice-chat/PROJECT_CONTEXT.md','voice-chat/PROJECT_MEMORY.json',...targets]
       }];
     }
 
@@ -319,7 +320,7 @@ async function executeAgentPlan(parsed,modelMessages,userText){
     const toolResults=[];
     for(const action of readActions){
       if(action.type==='repo_context'){
-        const paths=[...new Set(['voice-chat/PROJECT_CONTEXT.md',...(Array.isArray(action.paths)?action.paths:[])])].slice(0,10);
+        const paths=[...new Set(['voice-chat/PROJECT_CONTEXT.md','voice-chat/PROJECT_MEMORY.json',...(Array.isArray(action.paths)?action.paths:[])])].slice(0,10);
         setStatus('يقرأ ملفات المشروع…');
         const ctx=await bridgeContext(paths);
         lastRepoHead=ctx.head||lastRepoHead;

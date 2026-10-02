@@ -22,6 +22,7 @@ const ALLOWED_ORIGINS=new Set([
 const MAX_BODY=900000;
 const DEFAULT_CONTEXT=[
   'voice-chat/PROJECT_CONTEXT.md',
+  'voice-chat/PROJECT_MEMORY.json',
   'voice-chat/index.html',
   'voice-chat/app.js',
   'voice-chat/agent.js',
@@ -229,6 +230,7 @@ async function validateProject(touched){
     'app.js',
     'agent.js',
     'bridge.js',
+    'PROJECT_MEMORY.json',
     'manifest.webmanifest',
     'sw.js',
     'PROJECT_CONTEXT.md'
@@ -326,6 +328,27 @@ async function applyFiles(body){
 
     const msg=('Agent: '+String(body.message||'self update')).replace(/[\r\n]+/g,' ').slice(0,120);
     const publishId=crypto.randomBytes(12).toString('hex');
+    const changedAt=new Date().toISOString();
+
+    const memoryRel='voice-chat/PROJECT_MEMORY.json';
+    await backup(memoryRel);
+    const memoryFull=path.join(REPO,...memoryRel.split('/'));
+    let memory={version:1,project:'Super Voice Chat',recent_changes:[]};
+    try{
+      memory={...memory,...JSON.parse(await fsp.readFile(memoryFull,'utf8'))};
+    }catch{}
+    const memoryChange={
+      at:changedAt,
+      publish_id:publishId,
+      message:msg.replace(/^Agent:\s*/,''),
+      files:unique,
+      base:currentHead
+    };
+    memory.updated_at=changedAt;
+    memory.last_change=memoryChange;
+    memory.recent_changes=[...(Array.isArray(memory.recent_changes)?memory.recent_changes:[]),memoryChange].slice(-20);
+    await fsp.writeFile(memoryFull,JSON.stringify(memory,null,2)+'\n','utf8');
+    await git(['add','--',memoryRel]);
 
     const deployRel='voice-chat/deploy-state.json';
     await backup(deployRel);

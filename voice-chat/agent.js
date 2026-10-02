@@ -50,7 +50,7 @@ function saveState(state){
 <agent_action>{"type":"repo_write","message":"وصف قصير","files":[{"path":"voice-chat/new-file.js","content":"المحتوى الكامل"}]}</agent_action>
 
 استخدم دورة العمل: اكتشف عند الحاجة -> اقرأ الملفات -> عدّل -> دع النظام يختبر وينشر.
-قبل أي repo_patch أو repo_write يجب أن تقرأ voice-chat/PROJECT_CONTEXT.md ضمن repo_context حتى لا تفقد هدف المشروع أو حالته.
+قبل أي repo_patch أو repo_write يجب أن تقرأ voice-chat/PROJECT_CONTEXT.md و voice-chat/PROJECT_MEMORY.json ضمن repo_context حتى لا تفقد هدف المشروع أو آخر ما تم بناؤه.
 اقرأ الملف الذي ستعدله قبل تغييره إلا إذا كنت تنشئ ملفًا جديدًا. استخدم paths داخل voice-chat فقط.
 لا تعرض كتل agent_action للمستخدم؛ التطبيق ينفذها ويخفيها.
 الأداة extension تعمل داخل iframe معزول ويمكنها إنشاء واجهات وحسابات واستخدام fetch لخدمات تسمح بالاتصال من المتصفح.
