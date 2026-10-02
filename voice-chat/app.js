@@ -14,7 +14,8 @@ const pairCodeEl=document.querySelector('#pairCode');
 const pairSubmitEl=document.querySelector('#pairSubmit');
 const pairErrorEl=document.querySelector('#pairError');
 
-const MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
+const CHAT_MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
+const DEV_MODEL='onnx-community/Qwen2.5-Coder-0.5B-Instruct';
 const HISTORY_KEY='evo-chat-history-v1';
 const agentState=loadAgentState();
 let history=[];
@@ -23,6 +24,7 @@ try{
   if(Array.isArray(saved)) history=saved.filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string').slice(-30);
 }catch{}
 let generator=null;
+let currentModelId=null;
 let ready=true;
 let busy=false;
 let recognition=null;
@@ -125,12 +127,23 @@ pairCodeEl.addEventListener('keydown',e=>{
 
 refreshBridge().catch(()=>setBridgeBadge(false,hasBridgeToken()));
 
-async function loadModel(){
+async function loadModel(mode='chat'){
   if(modelIdleTimer){
     clearTimeout(modelIdleTimer);
     modelIdleTimer=null;
   }
-  if(generator) return;
+
+  const wantedModel=mode==='dev'?DEV_MODEL:CHAT_MODEL;
+  if(generator&&currentModelId===wantedModel) return;
+
+  if(generator&&currentModelId!==wantedModel){
+    const old=generator;
+    generator=null;
+    currentModelId=null;
+    try{
+      if(typeof old.dispose==='function') await old.dispose();
+    }catch{}
+  }
 
   const progress=p=>{
     if(!p)return;
@@ -146,7 +159,7 @@ async function loadModel(){
   if(navigator.gpu){
     try{
       setStatus('جاري تشغيل العقل على GPU…');
-      generator=await pipeline('text-generation',MODEL,{
+      generator=await pipeline('text-generation',wantedModel,{
         device:'webgpu',
         dtype:'q4f16',
         progress_callback:progress
@@ -158,14 +171,15 @@ async function loadModel(){
 
   if(!generator){
     setStatus('جاري تشغيل العقل على CPU…');
-    generator=await pipeline('text-generation',MODEL,{
+    generator=await pipeline('text-generation',wantedModel,{
       device:'wasm',
       dtype:'int8',
       progress_callback:progress
     });
   }
 
-  setStatus('جاهز');
+  currentModelId=wantedModel;
+  setStatus(mode==='dev'?'جاهز — عقل البرمجة':'جاهز');
 }
 
 function scheduleModelUnload(){
@@ -173,6 +187,7 @@ function scheduleModelUnload(){
   modelIdleTimer=setTimeout(async()=>{
     const old=generator;
     generator=null;
+    currentModelId=null;
     try{
       if(old&&typeof old.dispose==='function') await old.dispose();
     }catch{}
@@ -180,8 +195,8 @@ function scheduleModelUnload(){
   },120000);
 }
 
-async function generateText(messages,maxNewTokens=520){
-  await loadModel();
+async function generateText(messages,maxNewTokens=520,mode='chat'){
+  await loadModel(mode);
   const out=await generator(messages,{
     max_new_tokens:maxNewTokens,
     do_sample:true,
@@ -227,7 +242,7 @@ async function recoverInitialPlan(userText,modelMessages,answer){
       ...modelMessages,
       {role:'assistant',content:previous||''},
       {role:'system',content:buildRecoveryInstruction(userText,previous,'missing_action')}
-    ],520);
+    ],520,'dev');
     parsed=parseAgentOutput(repaired);
     if(parsed.actions.length) return parsed;
     previous=repaired;
@@ -273,7 +288,7 @@ async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,vi
           role:'system',
           content:'فشل تطبيق التعديل السابق بسبب: '+reason+'\nهذه هي الملفات الحالية. صحح التعديل وأخرج repo_patch أو repo_write فقط، دون تكرار الخطأ.\n\n'+formatContextResult(ctx)
         }
-      ],920);
+      ],920,'dev');
       const repaired=parseAgentOutput(repairAnswer);
       currentPatches=repaired.actions.filter(a=>a?.type==='repo_patch');
       currentWrites=repaired.actions.filter(a=>a?.type==='repo_write');
@@ -351,7 +366,7 @@ async function executeAgentPlan(parsed,modelMessages,userText){
     ];
 
     setStatus('يحلل المشروع…');
-    const followAnswer=await generateText(workingMessages,760);
+    const followAnswer=await generateText(workingMessages,760,'dev');
     const next=parseAgentOutput(followAnswer);
     actions=[...next.actions];
     if(next.clean) visible=next.clean;
@@ -362,7 +377,7 @@ async function executeAgentPlan(parsed,modelMessages,userText){
     const forced=await generateText([
       ...workingMessages,
       {role:'system',content:'انتهت مرحلة القراءة. لا تطلب قراءة أخرى. نفّذ طلب المستخدم الآن بإخراج repo_patch أو repo_write صالح، أو repo_rollback فقط إذا كان المستخدم قد طلب التراجع صراحة. إذا يوجد مانع تقني حقيقي، اذكره باختصار.'}
-    ],900);
+    ],900,'dev');
     const forcedParsed=parseAgentOutput(forced);
     if(forcedParsed.actions.length) actions=[...forcedParsed.actions];
     if(forcedParsed.clean) visible=forcedParsed.clean;
@@ -444,7 +459,8 @@ async function submit(){
       {role:'system',content:buildAgentSystem(agentState)},
       ...history.slice(-12)
     ];
-    const answer=await generateText(modelMessages,520);
+    const mode=(looksLikeDevelopmentRequest(text)||looksLikeRollbackRequest(text))?'dev':'chat';
+    const answer=await generateText(modelMessages,520,mode);
     const parsed=await recoverInitialPlan(text,modelMessages,answer);
     const result=await executeAgentPlan(parsed,modelMessages,text);
     const parts=[];
