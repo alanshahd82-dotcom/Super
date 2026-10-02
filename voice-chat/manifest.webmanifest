@@ -1,0 +1,18 @@
+{
+  "name": "دردشة الذكاء",
+  "short_name": "دردشة",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#0b0d10",
+  "theme_color": "#0b0d10",
+  "description": "دردشة ذكاء اصطناعي قابلة للتثبيت على الهاتف",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

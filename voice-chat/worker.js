@@ -1,6 +1,6 @@
 import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
 
-const MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
+const MODEL='onnx-community/Qwen3-0.6B-Instruct-ONNX';
 let generator=null;
 let device='wasm';
 
@@ -22,7 +22,7 @@ async function load(hasWebGPU){
       postMessage({type:'status',text:'جاري التشغيل على GPU…'});
       generator=await pipeline('text-generation',MODEL,{
         device:'webgpu',
-        dtype:'q4',
+        dtype:'q4f16',
         progress_callback:progress
       });
       device='webgpu';
