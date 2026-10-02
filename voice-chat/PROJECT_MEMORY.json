@@ -1,7 +1,18 @@
 {
   "version": 1,
   "project": "Super Voice Chat",
-  "updated_at": "2026-10-02T17:43:00Z",
+  "recent_changes": [
+    {
+      "at": "2026-10-02T18:03:09.638Z",
+      "publish_id": "ac84163b2fb2b465b50ea700",
+      "message": "rollback integration probe",
+      "files": [
+        "voice-chat/rollback-probe.txt"
+      ],
+      "base": "f76c16288fbcd824daa903a7cf68eeb5b9b63923"
+    }
+  ],
+  "updated_at": "2026-10-02T18:03:09.638Z",
   "goal": "PWA chat that can understand user development requests, inspect its own repository, modify itself, test, publish to GitHub Pages, and keep project context without requiring the user to edit code.",
   "constraints": [
     "0 MAD basic operating cost",
@@ -9,6 +20,13 @@
     "do not publish secrets",
     "preserve PROJECT_CONTEXT.md as the canonical handoff"
   ],
-  "last_change": null,
-  "recent_changes": []
+  "last_change": {
+    "at": "2026-10-02T18:03:09.638Z",
+    "publish_id": "ac84163b2fb2b465b50ea700",
+    "message": "rollback integration probe",
+    "files": [
+      "voice-chat/rollback-probe.txt"
+    ],
+    "base": "f76c16288fbcd824daa903a7cf68eeb5b9b63923"
+  }
 }

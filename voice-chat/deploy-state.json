@@ -1,9 +1,9 @@
 {
-  "publish_id": "5cbb510d2d6a017786304d09",
-  "requested_at": "2026-10-02T16:55:05.108Z",
-  "message": "refresh project context with verified agent milestones",
+  "publish_id": "ac84163b2fb2b465b50ea700",
+  "requested_at": "2026-10-02T18:03:09.852Z",
+  "message": "rollback integration probe",
   "files": [
-    "voice-chat/PROJECT_CONTEXT.md"
+    "voice-chat/rollback-probe.txt"
   ],
-  "base": "425448c060f06519d8c8c8b9e53efaf5114ddcb9"
+  "base": "f76c16288fbcd824daa903a7cf68eeb5b9b63923"
 }
