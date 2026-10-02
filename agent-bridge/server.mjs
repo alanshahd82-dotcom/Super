@@ -215,6 +215,55 @@ async function searchRepo(query,paths){
   }
 }
 
+const SECRET_PATTERNS=[
+  /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,
+  /\bghp_[A-Za-z0-9]{30,}\b/,
+  /\bgithub_pat_[A-Za-z0-9_]{30,}\b/,
+  /\bsk-[A-Za-z0-9_-]{24,}\b/
+];
+
+async function validateProject(touched){
+  const root=path.join(REPO,'voice-chat');
+  const required=[
+    'index.html',
+    'app.js',
+    'agent.js',
+    'bridge.js',
+    'manifest.webmanifest',
+    'sw.js',
+    'PROJECT_CONTEXT.md'
+  ];
+
+  for(const name of required){
+    const full=path.join(root,name);
+    const stat=await fsp.stat(full).catch(()=>null);
+    if(!stat?.isFile()) throw new Error('required_file_missing: voice-chat/'+name);
+  }
+
+  const index=await fsp.readFile(path.join(root,'index.html'),'utf8');
+  if(!/rel=["']manifest["']/i.test(index)) throw new Error('pwa_manifest_link_missing');
+  if(!/app\.js/i.test(index)) throw new Error('app_script_missing');
+
+  const manifest=JSON.parse(await fsp.readFile(path.join(root,'manifest.webmanifest'),'utf8'));
+  if(manifest.display!=='standalone') throw new Error('manifest_display_must_be_standalone');
+  if(!Array.isArray(manifest.icons)||manifest.icons.length<2) throw new Error('manifest_icons_missing');
+  for(const icon of manifest.icons){
+    const src=String(icon.src||'').replace(/^\.\//,'');
+    if(!src) throw new Error('manifest_icon_invalid');
+    const stat=await fsp.stat(path.join(root,src)).catch(()=>null);
+    if(!stat?.isFile()) throw new Error('manifest_icon_missing: '+src);
+  }
+
+  for(const rel of touched){
+    if(!TEXT_EXT.test(rel)) continue;
+    const content=await fsp.readFile(path.join(REPO,...rel.split('/')),'utf8').catch(()=>null);
+    if(content===null) continue;
+    for(const pattern of SECRET_PATTERNS){
+      if(pattern.test(content)) throw new Error('possible_secret_detected: '+rel);
+    }
+  }
+}
+
 async function applyFiles(body){
   const files=Array.isArray(body.files)?body.files:[];
   const edits=Array.isArray(body.edits)?body.edits:[];
@@ -266,6 +315,7 @@ async function applyFiles(body){
 
     const unique=[...new Set(touched)];
     for(const rel of unique) await validateFile(rel);
+    await validateProject(unique);
     await git(['diff','--check']);
     await git(['add','--',...unique]);
     const staged=(await git(['diff','--cached','--name-only'])).stdout;
