@@ -3,7 +3,7 @@ const input=document.querySelector('#input');
 const send=document.querySelector('#send');
 const mic=document.querySelector('#mic');
 const statusEl=document.querySelector('#status');
-const worker=new Worker('./worker.js?v=20261002-3',{type:'module'});
+const worker=new Worker('./worker.js?v=20261002-4',{type:'module'});
 worker.onerror=(e)=>{statusEl.textContent='خطأ تحميل النموذج';add('assistant','خطأ تحميل النموذج: '+(e.message||'غير معروف'));setBusy(false);};
 setInterval(()=>{document.title=(statusEl.textContent||'دردشة محلية')+' | دردشة محلية';},1000);
 const history=[];

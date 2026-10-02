@@ -1,6 +1,6 @@
-import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
+import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
 
-const MODEL='onnx-community/Qwen3-0.6B-Instruct-ONNX';
+const MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
 let generator=null;
 let device='wasm';
 
@@ -20,14 +20,23 @@ async function load(hasWebGPU){
   if(hasWebGPU){
     try{
       postMessage({type:'status',text:'جاري التشغيل على GPU…'});
-      generator=await pipeline('text-generation',MODEL,{device:'webgpu',dtype:'q4f16',progress_callback:progress});
+      generator=await pipeline('text-generation',MODEL,{
+        device:'webgpu',
+        dtype:'q4f16',
+        progress_callback:progress
+      });
       device='webgpu';
     }catch(e){
       generator=null;
     }
-  }  if(!generator){
+  }
+  if(!generator){
     postMessage({type:'status',text:'جاري التشغيل على CPU…'});
-    generator=await pipeline('text-generation',MODEL,{dtype:'q8',progress_callback:progress});
+    generator=await pipeline('text-generation',MODEL,{
+      device:'wasm',
+      dtype:'int8',
+      progress_callback:progress
+    });
     device='wasm';
   }
   postMessage({type:'ready',device});
@@ -41,12 +50,15 @@ self.onmessage=async({data})=>{
     }
     if(data.type==='generate'){
       if(!generator)await load(false);
-      const messages=(data.messages||[]).slice(-16);
+      const messages=(data.messages||[]).slice(-12);
       const out=await generator(messages,{
-        max_new_tokens:256,
-        do_sample:false,
+        max_new_tokens:192,
+        do_sample:true,
+        temperature:0.7,
+        top_p:0.9,
         repetition_penalty:1.05
-      });      const generated=out?.[0]?.generated_text;
+      });
+      const generated=out?.[0]?.generated_text;
       let text='';
       if(Array.isArray(generated)) text=generated.at(-1)?.content||'';
       else text=String(generated||'');
