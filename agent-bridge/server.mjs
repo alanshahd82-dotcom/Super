@@ -30,6 +30,96 @@ const DEFAULT_CONTEXT=[
   'voice-chat/sw.js'
 ];
 
+const CHAT_MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
+const DEV_MODEL='onnx-community/Qwen2.5-Coder-0.5B-Instruct';
+let modelPipeline=null;
+let modelPipelineId=null;
+let modelModulePromise=null;
+let modelIdleTimer=null;
+let inferenceQueue=Promise.resolve();
+
+async function getTransformers(){
+  if(!modelModulePromise){
+    modelModulePromise=import('@huggingface/transformers').then(mod=>{
+      mod.env.cacheDir=path.join(RUNTIME,'models');
+      mod.env.allowLocalModels=false;
+      return mod;
+    });
+  }
+  return modelModulePromise;
+}
+
+async function disposeModel(){
+  if(modelIdleTimer){
+    clearTimeout(modelIdleTimer);
+    modelIdleTimer=null;
+  }
+  const old=modelPipeline;
+  modelPipeline=null;
+  modelPipelineId=null;
+  try{
+    if(old&&typeof old.dispose==='function') await old.dispose();
+  }catch{}
+}
+
+function scheduleModelDispose(){
+  if(modelIdleTimer) clearTimeout(modelIdleTimer);
+  modelIdleTimer=setTimeout(()=>{disposeModel().catch(()=>{});},120000);
+}
+
+async function getModelPipeline(mode){
+  const wanted=mode==='dev'?DEV_MODEL:CHAT_MODEL;
+  if(modelPipeline&&modelPipelineId===wanted) return modelPipeline;
+  if(modelPipeline) await disposeModel();
+
+  const {pipeline}=await getTransformers();
+  modelPipeline=await pipeline('text-generation',wanted,{
+    device:'cpu',
+    dtype:'int8'
+  });
+  modelPipelineId=wanted;
+  return modelPipeline;
+}
+
+function extractGeneratedText(output){
+  const generated=output?.[0]?.generated_text;
+  if(Array.isArray(generated)) return String(generated.at(-1)?.content||'').trim();
+  return String(generated||'').trim();
+}
+
+async function generateOnBridge(body){
+  const messages=Array.isArray(body.messages)?body.messages.slice(-14):[];
+  if(!messages.length) throw new Error('messages_required');
+  const totalChars=messages.reduce((n,m)=>n+String(m?.content||'').length,0);
+  if(totalChars>70000) throw new Error('prompt_too_large');
+
+  const mode=body.mode==='dev'?'dev':'chat';
+  const maxNew=Math.max(32,Math.min(Number(body.max_new_tokens)||520,960));
+
+  const run=async()=>{
+    const generator=await getModelPipeline(mode);
+    const output=await generator(messages,{
+      max_new_tokens:maxNew,
+      do_sample:true,
+      temperature:0.65,
+      top_p:0.9,
+      repetition_penalty:1.05
+    });
+    scheduleModelDispose();
+    return {
+      ok:true,
+      text:extractGeneratedText(output),
+      mode,
+      model:modelPipelineId,
+      compute:'pc'
+    };
+  };
+
+  const next=inferenceQueue.then(run,run);
+  inferenceQueue=next.catch(()=>{});
+  return next;
+}
+
 await fsp.mkdir(RUNTIME,{recursive:true});
 let secret=await loadOrCreateSecret();
 let pairCode=String(crypto.randomInt(100000,1000000));
@@ -580,6 +670,12 @@ const server=http.createServer(async(req,res)=>{
 
     if(!authorized(req)){
       json(res,401,{error:'unauthorized'},origin);
+      return;
+    }
+
+    if(req.method==='POST'&&url.pathname==='/api/generate'){
+      const body=await readJson(req);
+      json(res,200,await generateOnBridge(body),origin);
       return;
     }
 

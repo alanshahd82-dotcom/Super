@@ -1,6 +1,6 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
 import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, looksLikeDevelopmentRequest, looksLikeRollbackRequest, buildRecoveryInstruction } from './agent.js?v=20261002-8';
-import { bridgeHealth, pairBridge, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, bridgeRollback, hasBridgeToken } from './bridge.js?v=20261002-3';
+import { bridgeHealth, pairBridge, bridgeGenerate, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, bridgeRollback, hasBridgeToken } from './bridge.js?v=20261002-4';
 
 const chat=document.querySelector('#chat');
 const input=document.querySelector('#input');
@@ -233,6 +233,19 @@ function scheduleModelUnload(){
 }
 
 async function generateText(messages,maxNewTokens=520,mode='chat'){
+  if(hasBridgeToken()){
+    try{
+      if(!bridgeOnline) await refreshBridge();
+      if(bridgeOnline){
+        setStatus(mode==='dev'?'يفكر عقل البرمجة على الحاسوب…':'يفكر على الحاسوب…');
+        const remote=await bridgeGenerate(messages,maxNewTokens,mode);
+        if(remote?.text) return String(remote.text).trim();
+      }
+    }catch{
+      setBridgeBadge(false,hasBridgeToken());
+    }
+  }
+
   await loadModel(mode);
   const out=await generator(messages,{
     max_new_tokens:maxNewTokens,

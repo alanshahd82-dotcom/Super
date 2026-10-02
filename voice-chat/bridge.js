@@ -56,6 +56,18 @@ export async function pairBridge(code){
   return {ok:true};
 }
 
+export async function bridgeGenerate(messages,maxNewTokens=520,mode='chat'){
+  return request('/api/generate',{
+    method:'POST',
+    auth:true,
+    body:{
+      messages:Array.isArray(messages)?messages:[],
+      max_new_tokens:Number(maxNewTokens)||520,
+      mode:mode==='dev'?'dev':'chat'
+    }
+  });
+}
+
 export async function bridgeContext(paths){
   return request('/api/context',{
     method:'POST',
