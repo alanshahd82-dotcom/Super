@@ -440,7 +440,7 @@ async function rollbackLatestAgentChange(body){
   try{
     await git(['revert','--no-commit',target]);
 
-    const touched=(await git(['diff','--name-only'])).stdout.split(/\r?\n/).filter(Boolean);
+    const touched=(await git(['diff','--cached','--name-only'])).stdout.split(/\r?\n/).filter(Boolean);
     if(!touched.length){
       await git(['reset','--hard',currentHead]);
       return {ok:true,no_changes:true,target};
@@ -452,6 +452,7 @@ async function rollbackLatestAgentChange(body){
       if(stat?.isFile()) await validateFile(rel);
     }
     await validateProject(touched);
+    await git(['diff','--cached','--check']);
     await git(['diff','--check']);
 
     const publishId=crypto.randomBytes(12).toString('hex');
