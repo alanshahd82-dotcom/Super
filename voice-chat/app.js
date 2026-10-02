@@ -1,5 +1,5 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-5';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, looksLikeDevelopmentRequest, buildRecoveryInstruction } from './agent.js?v=20261002-6';
 import { bridgeHealth, pairBridge, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, hasBridgeToken } from './bridge.js?v=20261002-2';
 
 const chat=document.querySelector('#chat');
@@ -217,14 +217,81 @@ function formatContextResult(ctx){
   }).join('\n\n');
 }
 
-async function executeAgentPlan(parsed,modelMessages){
+async function recoverInitialPlan(userText,modelMessages,answer){
+  let parsed=parseAgentOutput(answer);
+  if(parsed.actions.length||!looksLikeDevelopmentRequest(userText)) return parsed;
+  let previous=answer;
+  for(let attempt=1;attempt<=2;attempt++){
+    setStatus('يعيد التخطيط… '+attempt+'/2');
+    const repaired=await generateText([
+      ...modelMessages,
+      {role:'assistant',content:previous||''},
+      {role:'system',content:buildRecoveryInstruction(userText,previous,'missing_action')}
+    ],520);
+    parsed=parseAgentOutput(repaired);
+    if(parsed.actions.length) return parsed;
+    previous=repaired;
+  }
+  return parsed;
+}
+
+function collectRepoTargets(patches,writes){
+  return [...new Set([
+    ...patches.flatMap(a=>Array.isArray(a?.edits)?a.edits.map(x=>x?.path):[]),
+    ...writes.flatMap(a=>Array.isArray(a?.files)?a.files.map(x=>x?.path):[])
+  ].filter(Boolean))].slice(0,9);
+}
+
+async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,visible){
+  let currentPatches=[...patches];
+  let currentWrites=[...writes];
+  let currentHead=head;
+  let currentVisible=visible;
+
+  for(let attempt=0;attempt<2;attempt++){
+    const edits=currentPatches.flatMap(a=>Array.isArray(a.edits)?a.edits:[]).slice(0,16);
+    const files=currentWrites.flatMap(a=>Array.isArray(a.files)?a.files:[]).slice(0,12);
+    const message=[...currentPatches,...currentWrites].map(a=>a.message).find(Boolean)||'self update';
+    try{
+      setStatus(attempt?'يعيد الاختبار والنشر…':'يختبر وينشر…');
+      const result=await bridgeApply({message,edits,files,expected_head:currentHead});
+      return {result,visible:currentVisible};
+    }catch(e){
+      const reason=e?.message||String(e);
+      if(attempt>0||!/repository_changed|edit_match_missing|edit_match_not_unique/.test(reason)) throw e;
+
+      setStatus('يصحح التعديل تلقائيًا…');
+      const ctx=await bridgeContext([
+        'voice-chat/PROJECT_CONTEXT.md',
+        ...collectRepoTargets(currentPatches,currentWrites)
+      ]);
+      currentHead=ctx.head;
+      const repairAnswer=await generateText([
+        ...workingMessages,
+        {
+          role:'system',
+          content:'فشل تطبيق التعديل السابق بسبب: '+reason+'\nهذه هي الملفات الحالية. صحح التعديل وأخرج repo_patch أو repo_write فقط، دون تكرار الخطأ.\n\n'+formatContextResult(ctx)
+        }
+      ],920);
+      const repaired=parseAgentOutput(repairAnswer);
+      currentPatches=repaired.actions.filter(a=>a?.type==='repo_patch');
+      currentWrites=repaired.actions.filter(a=>a?.type==='repo_write');
+      if(!currentPatches.length&&!currentWrites.length) throw new Error('auto_repair_failed: '+reason);
+      if(repaired.clean) currentVisible=repaired.clean;
+    }
+  }
+  throw new Error('auto_repair_failed');
+}
+
+async function executeAgentPlan(parsed,modelMessages,userText){
   let actions=[...parsed.actions];
   let visible=parsed.clean;
   const notes=[];
+  const devIntent=looksLikeDevelopmentRequest(userText);
   let lastRepoHead=null;
   let workingMessages=[...modelMessages];
 
-  for(let round=0;round<3;round++){
+  for(let round=0;round<4;round++){
     let readActions=actions.filter(isRepoReadAction);
     const writeActions=actions.filter(isRepoWriteAction);
 
@@ -288,6 +355,17 @@ async function executeAgentPlan(parsed,modelMessages){
     if(next.clean) visible=next.clean;
   }
 
+  if(devIntent&&actions.length&&actions.every(isRepoReadAction)){
+    setStatus('يحوّل الخطة إلى تنفيذ…');
+    const forced=await generateText([
+      ...workingMessages,
+      {role:'system',content:'انتهت مرحلة القراءة. لا تطلب قراءة أخرى. نفّذ طلب المستخدم الآن بإخراج repo_patch أو repo_write صالح مبني على المعلومات التي لديك. إذا يوجد مانع تقني حقيقي، اذكره باختصار.'}
+    ],900);
+    const forcedParsed=parseAgentOutput(forced);
+    if(forcedParsed.actions.length) actions=[...forcedParsed.actions];
+    if(forcedParsed.clean) visible=forcedParsed.clean;
+  }
+
   const localActions=actions.filter(a=>!isRepoAction(a));
   const localApplied=applyAgentActions(agentState,localActions,{chat,input,titleEl});
   notes.push(...localApplied);
@@ -302,16 +380,15 @@ async function executeAgentPlan(parsed,modelMessages){
     }else if(!lastRepoHead){
       notes.push('لم يتم نشر التعديل لأن الوكيل لم يقرأ سياق المشروع أولًا.');
     }else{
-      const edits=repoPatches.flatMap(a=>Array.isArray(a.edits)?a.edits:[]).slice(0,16);
-      const files=repoWrites.flatMap(a=>Array.isArray(a.files)?a.files:[]).slice(0,12);
-      const message=[...repoPatches,...repoWrites].map(a=>a.message).find(Boolean)||'self update';
-      setStatus('يختبر وينشر…');
-      const result=await bridgeApply({
-        message,
-        edits,
-        files,
-        expected_head:lastRepoHead
-      });
+      const applied=await applyRepoChangesWithRepair(
+        repoPatches,
+        repoWrites,
+        lastRepoHead,
+        workingMessages,
+        visible
+      );
+      const result=applied.result;
+      if(applied.visible) visible=applied.visible;
       if(result.no_changes){
         notes.push('لم تكن هناك تغييرات جديدة للنشر.');
       }else if(result.commit){
@@ -325,6 +402,8 @@ async function executeAgentPlan(parsed,modelMessages){
       }
       await refreshBridge();
     }
+  }else if(devIntent&&!localActions.length){
+    notes.push('أعاد الوكيل التخطيط تلقائيًا، لكنه لم ينتج تعديلًا صالحًا؛ لذلك لم يغيّر المشروع.');
   }
 
   return {visible:(visible||'').trim(),notes};
@@ -349,8 +428,8 @@ async function submit(){
       ...history.slice(-12)
     ];
     const answer=await generateText(modelMessages,520);
-    const parsed=parseAgentOutput(answer);
-    const result=await executeAgentPlan(parsed,modelMessages);
+    const parsed=await recoverInitialPlan(text,modelMessages,answer);
+    const result=await executeAgentPlan(parsed,modelMessages,text);
     const parts=[];
     if(result.visible) parts.push(result.visible);
     if(result.notes.length) parts.push(result.notes.join('\n'));

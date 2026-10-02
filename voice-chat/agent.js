@@ -58,6 +58,11 @@ function saveState(state){
 الأدوات الحالية: ${JSON.stringify(ext)}`;
 }
 
+const ACTION_TYPES=new Set([
+  'ui_patch','extension','remove_extension','remember',
+  'repo_tree','repo_search','repo_context','repo_patch','repo_write'
+]);
+
 export function parseAgentOutput(text){
   const actions=[];
   const rx=/<agent_action>([\s\S]*?)<\/agent_action>/gi;
@@ -65,11 +70,30 @@ export function parseAgentOutput(text){
   while((match=rx.exec(text))){
     try{
       const obj=JSON.parse(match[1].trim());
-      if(obj&&typeof obj==='object') actions.push(obj);
+      if(obj&&typeof obj==='object'&&ACTION_TYPES.has(obj.type)) actions.push(obj);
     }catch{}
   }
-  const clean=text.replace(rx,'').trim();
+  const clean=text.replace(rx,'').replace(/<agent_noop\s*\/?>/gi,'').trim();
   return {clean,actions};
+}
+
+export function looksLikeDevelopmentRequest(text){
+  const s=String(text||'').toLowerCase();
+  const verbs=/(أضف|اضف|ضيف|حسّن|حسن|طوّر|طور|عدّل|عدل|غيّر|غير|اربط|أنشئ|انشئ|ابن[ِى]?|حوّل|حول|ثبّت|ثبت|احذف|أزل|ازل|أصلح|اصلح|صمّم|صمم|ادمج|ادمج|انشر|حدّث|حدث|add|improve|change|modify|edit|build|create|connect|integrate|deploy|fix|remove|delete|redesign)/i;
+  const targets=/(التطبيق|الدردشة|الشات|الواجهة|المشروع|الموقع|صفحة|زر|كاميرا|جيتهاب|github|قاعدة|تكامل|ميزة|ملف|كود|نفسك|app|chat|ui|project|site|page|button|camera|database|integration|feature|file|code|yourself)/i;
+  return verbs.test(s)&&(targets.test(s)||s.length<140);
+}
+
+export function buildRecoveryInstruction(userText,previousAnswer,reason='missing_action'){
+  return `طلب المستخدم الأصلي:
+${String(userText||'')}
+
+ردك السابق:
+${String(previousAnswer||'')}
+
+المشكلة: ${reason}
+
+إذا كان طلب المستخدم يطلب تغيير التطبيق أو المشروع فعلياً، فلا تكتف بالكلام. أخرج الآن agent_action صالحاً يبدأ بالاستكشاف/القراءة أو بالتعديل المناسب. إذا لم يكن الطلب طلب تطوير، أخرج فقط <agent_noop/>. لا تكرر الشرح.`;
 }function safeId(value){
   return String(value||'').trim().replace(/[^a-zA-Z0-9_-]/g,'-').slice(0,64);
 }
