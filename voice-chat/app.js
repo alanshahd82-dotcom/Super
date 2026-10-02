@@ -5,6 +5,7 @@ const mic=document.querySelector('#mic');
 const statusEl=document.querySelector('#status');
 const worker=new Worker('./worker.js',{type:'module'});
 worker.onerror=(e)=>{statusEl.textContent='خطأ تحميل النموذج';add('assistant','خطأ تحميل النموذج: '+(e.message||'غير معروف'));setBusy(false);};
+setInterval(()=>{document.title=(statusEl.textContent||'دردشة محلية')+' | دردشة محلية';},1000);
 const history=[];
 let ready=false,busy=false;
 let recognition=null;
