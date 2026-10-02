@@ -1,5 +1,5 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-4';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-5';
 import { bridgeHealth, pairBridge, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, hasBridgeToken } from './bridge.js?v=20261002-2';
 
 const chat=document.querySelector('#chat');
@@ -298,7 +298,12 @@ async function executeAgentPlan(parsed,modelMessages){
       if(result.no_changes){
         notes.push('لم تكن هناك تغييرات جديدة للنشر.');
       }else if(result.commit){
-        notes.push('تم الاختبار والنشر على GitHub: '+result.commit.slice(0,7));
+        notes.push('تم الاختبار ورفع التعديل إلى GitHub: '+result.commit.slice(0,7));
+        if(result.deployed){
+          notes.push('تم التأكد أن GitHub Pages نشر النسخة الجديدة فعليًا.');
+        }else{
+          notes.push('تم رفع التعديل، لكن لم يصل تأكيد GitHub Pages ضمن مهلة التحقق.');
+        }
         if(result.live_url) notes.push('النسخة المنشورة: '+result.live_url);
       }
       await refreshBridge();

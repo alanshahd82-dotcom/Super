@@ -111,6 +111,29 @@ async function git(args,opts={}){
   return {stdout:stdout.trim(),stderr:stderr.trim()};
 }
 
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+
+async function waitForPagesDeployment(publishId,timeoutMs=75000){
+  const start=Date.now();
+  const url='https://alanshahd82-dotcom.github.io/Super/voice-chat/deploy-state.json';
+  while(Date.now()-start<timeoutMs){
+    try{
+      const r=await fetch(url+'?publish='+encodeURIComponent(publishId)+'&t='+Date.now(),{
+        cache:'no-store',
+        headers:{'user-agent':'SuperVoiceAgent/1.0'}
+      });
+      if(r.ok){
+        const data=await r.json();
+        if(data.publish_id===publishId){
+          return {deployed:true,wait_ms:Date.now()-start};
+        }
+      }
+    }catch{}
+    await sleep(4000);
+  }
+  return {deployed:false,wait_ms:Date.now()-start};
+}
+
 async function getContext(paths){
   const requested=Array.isArray(paths)&&paths.length?paths:DEFAULT_CONTEXT;
   const files=[];
@@ -252,12 +275,26 @@ async function applyFiles(body){
     }
 
     const msg=('Agent: '+String(body.message||'self update')).replace(/[\r\n]+/g,' ').slice(0,120);
+    const publishId=crypto.randomBytes(12).toString('hex');
+
+    const deployRel='voice-chat/deploy-state.json';
+    await backup(deployRel);
+    const deployFull=path.join(REPO,...deployRel.split('/'));
+    await fsp.writeFile(deployFull,JSON.stringify({
+      publish_id:publishId,
+      requested_at:new Date().toISOString(),
+      message:msg.replace(/^Agent:\s*/,''),
+      files:unique,
+      base:currentHead
+    },null,2)+'\n','utf8');
+    await git(['add','--',deployRel]);
 
     const historyRel='voice-chat/AGENT_HISTORY.jsonl';
     await backup(historyRel);
     const historyFull=path.join(REPO,...historyRel.split('/'));
     const historyEntry={
       at:new Date().toISOString(),
+      publish_id:publishId,
       message:msg.replace(/^Agent:\s*/,''),
       files:unique,
       base:currentHead
@@ -273,10 +310,15 @@ async function applyFiles(body){
     }catch(pushError){
       throw new Error('push_failed: '+(pushError.stderr||pushError.message));
     }
+
+    const deployment=await waitForPagesDeployment(publishId);
     return {
       ok:true,
       commit:sha,
       files:unique,
+      publish_id:publishId,
+      deployed:deployment.deployed,
+      deploy_wait_ms:deployment.wait_ms,
       live_url:'https://alanshahd82-dotcom.github.io/Super/voice-chat/?commit='+sha.slice(0,12)
     };
   }catch(err){
