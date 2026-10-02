@@ -1,10 +1,11 @@
-const CACHE='voice-chat-v3';
+const CACHE='voice-chat-v4';
 const ASSETS=[
   './',
   './index.html',
   './app.js',
   './agent.js',
-  './worker.js',
+  './bridge.js',
+  './bridge-endpoint.json',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png'
@@ -25,6 +26,11 @@ self.addEventListener('activate',event=>{
 
 self.addEventListener('fetch',event=>{
   if(event.request.method!=='GET') return;
+  const url=new URL(event.request.url);
+  if(url.pathname.endsWith('/bridge-endpoint.json')){
+    event.respondWith(fetch(event.request,{cache:'no-store'}));
+    return;
+  }
   event.respondWith(
     fetch(event.request).then(response=>{
       const copy=response.clone();

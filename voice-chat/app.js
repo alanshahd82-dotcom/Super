@@ -1,5 +1,6 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-1';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-2';
+import { bridgeHealth, pairBridge, bridgeContext, bridgeApply, hasBridgeToken } from './bridge.js?v=20261002-1';
 
 const chat=document.querySelector('#chat');
 const input=document.querySelector('#input');
@@ -7,6 +8,11 @@ const send=document.querySelector('#send');
 const mic=document.querySelector('#mic');
 const statusEl=document.querySelector('#status');
 const titleEl=document.querySelector('.title');
+const bridgeStatusEl=document.querySelector('#bridgeStatus');
+const pairModal=document.querySelector('#pairModal');
+const pairCodeEl=document.querySelector('#pairCode');
+const pairSubmitEl=document.querySelector('#pairSubmit');
+const pairErrorEl=document.querySelector('#pairError');
 
 const MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
 const HISTORY_KEY='evo-chat-history-v1';
@@ -56,6 +62,68 @@ function saveHistory(){
 for(const msg of history) add(msg.role,msg.content);
 restoreAgentUI(agentState,{chat,input,titleEl});
 
+let bridgeOnline=false;
+
+function setBridgeBadge(online,paired){
+  bridgeOnline=online;
+  bridgeStatusEl.classList.toggle('online',online&&paired);
+  bridgeStatusEl.classList.toggle('offline',!(online&&paired));
+  bridgeStatusEl.textContent=online?(paired?'GitHub ✓':'ربط GitHub'):'GitHub ×';
+}
+
+async function refreshBridge(){
+  const state=await bridgeHealth();
+  setBridgeBadge(state.online,hasBridgeToken());
+  return state;
+}
+
+function showPairModal(){
+  pairErrorEl.textContent='';
+  pairCodeEl.value='';
+  pairModal.hidden=false;
+  setTimeout(()=>pairCodeEl.focus(),50);
+}
+
+function hidePairModal(){
+  pairModal.hidden=true;
+}
+
+bridgeStatusEl.addEventListener('click',async()=>{
+  const state=await refreshBridge();
+  if(state.online&&!hasBridgeToken()) showPairModal();
+});
+
+pairModal.addEventListener('click',e=>{
+  if(e.target===pairModal) hidePairModal();
+});
+
+pairSubmitEl.addEventListener('click',async()=>{
+  const code=pairCodeEl.value.trim();
+  if(!/^\d{6}$/.test(code)){
+    pairErrorEl.textContent='أدخل رمزًا من 6 أرقام.';
+    return;
+  }
+  pairSubmitEl.disabled=true;
+  pairErrorEl.textContent='جاري الربط…';
+  try{
+    await pairBridge(code);
+    pairErrorEl.textContent='';
+    hidePairModal();
+    await refreshBridge();
+    add('assistant','تم ربط GitHub. أستطيع الآن قراءة ملفات المشروع وتعديلها ونشر التغييرات من داخل الدردشة.');
+  }catch(e){
+    pairErrorEl.textContent='تعذر الربط: '+(e?.message||String(e));
+  }finally{
+    pairSubmitEl.disabled=false;
+  }
+});
+
+pairCodeEl.addEventListener('keydown',e=>{
+  if(e.key==='Enter') pairSubmitEl.click();
+});
+
+refreshBridge().catch(()=>setBridgeBadge(false,hasBridgeToken()));
+
 async function loadModel(){
   setBusy(true);
   const progress=p=>{
@@ -97,6 +165,85 @@ async function loadModel(){
   input.focus();
 }
 
+async function generateText(messages,maxNewTokens=520){
+  const out=await generator(messages,{
+    max_new_tokens:maxNewTokens,
+    do_sample:true,
+    temperature:0.65,
+    top_p:0.9,
+    repetition_penalty:1.05
+  });
+  const generated=out?.[0]?.generated_text;
+  let answer='';
+  if(Array.isArray(generated)) answer=generated.at(-1)?.content||'';
+  else answer=String(generated||'');
+  return answer.trim();
+}
+
+function isRepoAction(action){
+  return ['repo_context','repo_patch','repo_write'].includes(action?.type);
+}
+
+async function executeAgentPlan(parsed,modelMessages){
+  let current=parsed;
+  let actions=[...parsed.actions];
+  let visible=parsed.clean;
+  const notes=[];
+
+  const contextActions=actions.filter(a=>a?.type==='repo_context');
+  if(contextActions.length){
+    const state=await refreshBridge();
+    if(!state.online||!hasBridgeToken()){
+      if(state.online) showPairModal();
+      notes.push(state.online?'يلزم ربط GitHub مرة واحدة لإكمال التطوير الدائم.':'جسر التطوير غير متصل حاليًا.');
+    }else{
+      const paths=[...new Set(contextActions.flatMap(a=>Array.isArray(a.paths)?a.paths:[]))].slice(0,10);
+      setStatus('يقرأ ملفات المشروع…');
+      const ctx=await bridgeContext(paths);
+      const contextText=(ctx.files||[]).map(f=>{
+        if(f.missing) return 'FILE '+f.path+' [MISSING]';
+        if(f.error) return 'FILE '+f.path+' ['+f.error+']';
+        return 'FILE '+f.path+'\n---\n'+f.content+'\n---';
+      }).join('\n\n');
+      const followMessages=[
+        ...modelMessages,
+        {role:'assistant',content:parsed.clean||'أحتاج قراءة ملفات المشروع قبل التنفيذ.'},
+        {role:'system',content:'هذه هي ملفات المشروع التي طلبتها. أكمل طلب المستخدم الآن. نفّذ التعديل باستخدام repo_patch أو repo_write، ولا تطلب الملفات نفسها مرة أخرى.\n\n'+contextText}
+      ];
+      setStatus('يبني التعديل…');
+      const followAnswer=await generateText(followMessages,760);
+      current=parseAgentOutput(followAnswer);
+      actions=[...actions.filter(a=>a?.type!=='repo_context'),...current.actions];
+      if(current.clean) visible=current.clean;
+    }
+  }
+
+  const localActions=actions.filter(a=>!isRepoAction(a));
+  const localApplied=applyAgentActions(agentState,localActions,{chat,input,titleEl});
+  notes.push(...localApplied);
+
+  const repoPatches=actions.filter(a=>a?.type==='repo_patch');
+  const repoWrites=actions.filter(a=>a?.type==='repo_write');
+  if(repoPatches.length||repoWrites.length){
+    const state=await refreshBridge();
+    if(!state.online||!hasBridgeToken()){
+      if(state.online) showPairModal();
+      notes.push(state.online?'يلزم ربط GitHub مرة واحدة قبل النشر.':'جسر التطوير غير متصل حاليًا.');
+    }else{
+      const edits=repoPatches.flatMap(a=>Array.isArray(a.edits)?a.edits:[]).slice(0,16);
+      const files=repoWrites.flatMap(a=>Array.isArray(a.files)?a.files:[]).slice(0,12);
+      const message=[...repoPatches,...repoWrites].map(a=>a.message).find(Boolean)||'self update';
+      setStatus('يختبر وينشر…');
+      const result=await bridgeApply({message,edits,files});
+      if(result.no_changes) notes.push('لم تكن هناك تغييرات جديدة للنشر.');
+      else if(result.commit) notes.push('تم اختبار التعديل ونشره على GitHub: '+result.commit.slice(0,7));
+      await refreshBridge();
+    }
+  }
+
+  return {visible:(visible||'').trim(),notes};
+}
+
 async function submit(){
   const text=input.value.trim();
   if(!text||busy||!ready)return;
@@ -115,28 +262,20 @@ async function submit(){
       {role:'system',content:buildAgentSystem(agentState)},
       ...history.slice(-12)
     ];
-    const out=await generator(modelMessages,{
-      max_new_tokens:320,
-      do_sample:true,
-      temperature:0.7,
-      top_p:0.9,
-      repetition_penalty:1.05
-    });
-    const generated=out?.[0]?.generated_text;
-    let answer='';
-    if(Array.isArray(generated)) answer=generated.at(-1)?.content||'';
-    else answer=String(generated||'');
-    answer=answer.trim();
+    const answer=await generateText(modelMessages,520);
     const parsed=parseAgentOutput(answer);
-    const applied=applyAgentActions(agentState,parsed.actions,{chat,input,titleEl});
-    const visible=parsed.clean||applied.join('، ')||'تم.';
+    const result=await executeAgentPlan(parsed,modelMessages);
+    const parts=[];
+    if(result.visible) parts.push(result.visible);
+    if(result.notes.length) parts.push(result.notes.join('\n'));
+    const visible=parts.join('\n\n')||'تم.';
     history.push({role:'assistant',content:visible});
     saveHistory();
     add('assistant',visible);
     speak(visible);
     setStatus('جاهز');
   }catch(e){
-    add('assistant','تعذر تشغيل النموذج: '+(e?.message||String(e)));
+    add('assistant','تعذر التنفيذ: '+(e?.message||String(e)));
     setStatus('خطأ');
   }finally{
     setBusy(false);
@@ -206,6 +345,10 @@ if(SR){
 }else{
   mic.disabled=true;
   mic.title='الإملاء الصوتي غير مدعوم في هذا المتصفح';
+}
+
+if('serviceWorker' in navigator){
+  addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 }
 
 setBusy(true);

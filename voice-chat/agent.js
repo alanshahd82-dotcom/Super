@@ -28,15 +28,26 @@ function saveState(state){
 }export function buildAgentSystem(state){
   const memory=JSON.stringify(state.memory||{});
   const ext=(state.extensions||[]).map(x=>({id:x.id,name:x.name}));
-  return `أنت العقل داخل تطبيق دردشة قابل للتطور أثناء الاستخدام.
-تحدث مع المستخدم بشكل طبيعي وبنفس لغته.
-عندما يطلب المستخدم تغيير التطبيق أو إضافة أداة أو تكامل، نفّذ ذلك بإضافة كتلة أو أكثر في آخر ردك بهذا الشكل فقط:
+  return `أنت العقل داخل تطبيق دردشة يستطيع تطوير نفسه ومشروعه.
+تحدث مع المستخدم بشكل طبيعي وبنفس لغته. إذا طلب تغييرًا فعليًا فلا تكتف بالشرح: استخدم أدوات التنفيذ أدناه.
+
+للتغييرات المحلية داخل جلسة التطبيق:
 <agent_action>{"type":"ui_patch","title":"عنوان اختياري","placeholder":"نص اختياري","css":"CSS اختياري"}</agent_action>
 <agent_action>{"type":"extension","id":"معرف-قصير","name":"اسم الأداة","html":"HTML","css":"CSS اختياري","js":"JavaScript اختياري"}</agent_action>
 <agent_action>{"type":"remove_extension","id":"معرف-الأداة"}</agent_action>
 <agent_action>{"type":"remember","key":"اسم","value":"قيمة"}</agent_action>
+
+للتطوير الدائم في GitHub والنشر:
+إذا كنت تحتاج قراءة ملفات المشروع أولًا فاطلبها هكذا:
+<agent_action>{"type":"repo_context","paths":["voice-chat/index.html","voice-chat/app.js"]}</agent_action>
+بعد أن تحصل على الملفات، نفّذ تعديلًا دقيقًا ويفضل الاستبدال الجراحي:
+<agent_action>{"type":"repo_patch","message":"وصف قصير","edits":[{"path":"voice-chat/app.js","old":"النص المطابق حرفيًا","new":"النص البديل"}]}</agent_action>
+ولإنشاء ملف جديد أو عندما يكون الاستبدال غير مناسب:
+<agent_action>{"type":"repo_write","message":"وصف قصير","files":[{"path":"voice-chat/new-file.js","content":"المحتوى الكامل"}]}</agent_action>
+
+اقرأ الملف قبل تعديله إلا إذا كنت تنشئ ملفًا جديدًا. استخدم paths داخل voice-chat فقط.
+لا تعرض كتل agent_action للمستخدم؛ التطبيق ينفذها ويخفيها.
 الأداة extension تعمل داخل iframe معزول ويمكنها إنشاء واجهات وحسابات واستخدام fetch لخدمات تسمح بالاتصال من المتصفح.
-لا تكتب agent_action إلا عندما يريد المستخدم تنفيذ تغيير فعلي. لا تعرض كتل التنفيذ داخل الشرح.
 ذاكرة المشروع الحالية: ${memory}
 الأدوات الحالية: ${JSON.stringify(ext)}`;
 }

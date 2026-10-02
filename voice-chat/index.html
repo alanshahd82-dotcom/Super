@@ -12,7 +12,7 @@
 *{box-sizing:border-box}html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;background:#0b0d10;color:#f4f6f8}
 body{display:flex;justify-content:center}.app{width:min(900px,100%);height:100dvh;display:grid;grid-template-rows:auto 1fr auto;background:#0b0d10}
 header{padding:14px 16px;border-bottom:1px solid #222831;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#101318}
-.title{font-weight:700}.status{font-size:12px;color:#aab2bd;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.title{font-weight:700}.head-right{display:flex;align-items:center;gap:8px;min-width:0}.status{font-size:12px;color:#aab2bd;max-width:48vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.bridge-status{min-width:auto;padding:7px 10px;border-radius:999px;font-size:12px;background:#171b21;border:1px solid #2a313b;color:#aab2bd}.bridge-status.online{color:#a8f0bd;border-color:#245d37}.bridge-status.offline{color:#f0b0b0;border-color:#63313a}
 #chat{padding:18px 14px;overflow:auto;display:flex;flex-direction:column;gap:12px}
 .msg{max-width:88%;padding:12px 14px;border-radius:18px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
 .user{align-self:flex-start;background:#2357d9;color:white;border-bottom-right-radius:5px}
@@ -25,10 +25,11 @@ button{border:0;border-radius:16px;min-width:48px;padding:0 14px;background:#202
 .agent-card{width:100%;border:1px solid #2b3440;background:#11151b;border-radius:18px;overflow:hidden}
 .agent-card-title{padding:10px 12px;font-weight:700;border-bottom:1px solid #252b34}
 .agent-frame{display:block;width:100%;min-height:260px;border:0;background:#11151b}
+.pair-modal[hidden]{display:none}.pair-modal{position:fixed;inset:0;z-index:50;background:#000a;display:grid;place-items:center;padding:18px}.pair-box{width:min(420px,100%);background:#11151b;border:1px solid #2b3440;border-radius:22px;padding:18px;box-shadow:0 20px 70px #0008}.pair-box h2{margin:0 0 8px;font-size:20px}.pair-box p{margin:0 0 14px;color:#aab2bd;line-height:1.6}.pair-row{display:flex;gap:8px}.pair-row input{flex:1;min-width:0;background:#0d1014;color:#fff;border:1px solid #303844;border-radius:14px;padding:12px 14px;font:inherit;text-align:center;letter-spacing:3px}.pair-row button{min-height:46px}.pair-error{min-height:22px;margin-top:8px;font-size:12px;color:#f1a6ad}
 </style>
 </head><body>
 <div class="app">
-<header><div class="title">دردشة</div><div id="status" class="status">جاري تجهيز النموذج…</div></header>
+<header><div class="title">دردشة</div><div class="head-right"><button id="bridgeStatus" class="bridge-status offline" type="button">GitHub</button><div id="status" class="status">جاري تجهيز النموذج…</div></div></header>
 <main id="chat"></main>
 <div>
 <div class="composer">
@@ -39,6 +40,17 @@ button{border:0;border-radius:16px;min-width:48px;padding:0 14px;background:#202
 <div class="hint">أول تشغيل يحتاج تنزيل النموذج مرة واحدة.</div>
 </div>
 </div>
-<script type="module" src="./app.js?v=20261002-7"></script>
+<div id="pairModal" class="pair-modal" hidden>
+  <div class="pair-box">
+    <h2>ربط التطوير</h2>
+    <p>أدخل رمز الربط المؤقت لتمكين قراءة ملفات المشروع وتعديلها ونشرها من داخل الدردشة.</p>
+    <div class="pair-row">
+      <input id="pairCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000">
+      <button id="pairSubmit" type="button">ربط</button>
+    </div>
+    <div id="pairError" class="pair-error"></div>
+  </div>
+</div>
+<script type="module" src="./app.js?v=20261002-8"></script>
 </body>
 </html>
