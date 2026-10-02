@@ -1,13 +1,21 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-1';
 
 const chat=document.querySelector('#chat');
 const input=document.querySelector('#input');
 const send=document.querySelector('#send');
 const mic=document.querySelector('#mic');
 const statusEl=document.querySelector('#status');
+const titleEl=document.querySelector('.title');
 
 const MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
-const history=[];
+const HISTORY_KEY='evo-chat-history-v1';
+const agentState=loadAgentState();
+let history=[];
+try{
+  const saved=JSON.parse(localStorage.getItem(HISTORY_KEY)||'[]');
+  if(Array.isArray(saved)) history=saved.filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string').slice(-30);
+}catch{}
 let generator=null;
 let ready=false;
 let busy=false;
@@ -40,6 +48,13 @@ function resize(){
   input.style.height='auto';
   input.style.height=Math.min(input.scrollHeight,140)+'px';
 }
+
+function saveHistory(){
+  try{ localStorage.setItem(HISTORY_KEY,JSON.stringify(history.slice(-30))); }catch{}
+}
+
+for(const msg of history) add(msg.role,msg.content);
+restoreAgentUI(agentState,{chat,input,titleEl});
 
 async function loadModel(){
   setBusy(true);
@@ -87,6 +102,7 @@ async function submit(){
   if(!text||busy||!ready)return;
 
   history.push({role:'user',content:text});
+  saveHistory();
   add('user',text);
   input.value='';
   resize();
@@ -95,8 +111,12 @@ async function submit(){
 
   try{
     await new Promise(r=>requestAnimationFrame(r));
-    const out=await generator(history.slice(-12),{
-      max_new_tokens:192,
+    const modelMessages=[
+      {role:'system',content:buildAgentSystem(agentState)},
+      ...history.slice(-12)
+    ];
+    const out=await generator(modelMessages,{
+      max_new_tokens:320,
       do_sample:true,
       temperature:0.7,
       top_p:0.9,
@@ -107,9 +127,13 @@ async function submit(){
     if(Array.isArray(generated)) answer=generated.at(-1)?.content||'';
     else answer=String(generated||'');
     answer=answer.trim();
-    history.push({role:'assistant',content:answer});
-    add('assistant',answer||'…');
-    speak(answer);
+    const parsed=parseAgentOutput(answer);
+    const applied=applyAgentActions(agentState,parsed.actions,{chat,input,titleEl});
+    const visible=parsed.clean||applied.join('، ')||'تم.';
+    history.push({role:'assistant',content:visible});
+    saveHistory();
+    add('assistant',visible);
+    speak(visible);
     setStatus('جاهز');
   }catch(e){
     add('assistant','تعذر تشغيل النموذج: '+(e?.message||String(e)));

@@ -1,8 +1,9 @@
-const CACHE='voice-chat-v2';
+const CACHE='voice-chat-v3';
 const ASSETS=[
   './',
   './index.html',
   './app.js',
+  './agent.js',
   './worker.js',
   './manifest.webmanifest',
   './icon-192.png',
