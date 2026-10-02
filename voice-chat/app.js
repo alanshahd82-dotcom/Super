@@ -66,6 +66,7 @@ let ready=true;
 let busy=false;
 let recognition=null;
 let modelIdleTimer=null;
+let currentTaskId=null;
 
 env.backends.onnx.wasm.numThreads=1;
 env.backends.onnx.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0-dev.20250409-89f8206ba4/dist/';
@@ -85,9 +86,43 @@ function setBusy(v){
   mic.disabled=v;
 }
 
+function updateTaskCard(id,text,state='working'){
+  if(!id)return;
+  let card=chat.querySelector('[data-task-id="'+id+'"]');
+  if(!card){
+    card=document.createElement('section');
+    card.className='task-card';
+    card.dataset.taskId=id;
+
+    const head=document.createElement('div');
+    head.className='task-head';
+
+    const label=document.createElement('span');
+    const dot=document.createElement('span');
+    dot.className='task-dot';
+    label.append(dot,document.createTextNode('مهمة تطوير'));
+
+    const shortId=document.createElement('span');
+    shortId.textContent=id.slice(0,8);
+
+    const stage=document.createElement('div');
+    stage.className='task-stage';
+    stage.setAttribute('aria-live','polite');
+
+    head.append(label,shortId);
+    card.append(head,stage);
+    chat.appendChild(card);
+  }
+  card.classList.toggle('done',state==='done');
+  card.classList.toggle('error',state==='error');
+  card.querySelector('.task-stage').textContent=String(text||'');
+  chat.scrollTop=chat.scrollHeight;
+}
+
 function setStatus(text){
   statusEl.textContent=text;
   document.title=text+' | دردشة محلية';
+  if(currentTaskId) updateTaskCard(currentTaskId,text);
 }
 
 function resize(){
@@ -521,6 +556,8 @@ async function submit(options={}){
   let task=null;
   if(devMode){
     task=resumeTask||createTask(text);
+    currentTaskId=task.id;
+    updateTaskCard(task.id,resumeTask?'يستأنف المهمة…':'بدأ تنفيذ أمر التطوير…');
     if(resumeTask){
       updateTask(task,{
         status:'running',
@@ -570,6 +607,7 @@ async function submit(options={}){
         execution:result.executionMeta||{},
         last_message:visible.slice(0,1500)
       });
+      updateTaskCard(task.id,result.executed?'اكتملت المهمة وتم حفظ النتيجة.':'توقفت المهمة دون تغيير المشروع.',result.executed?'done':'error');
     }
     setStatus('جاهز');
   }catch(e){
@@ -579,11 +617,13 @@ async function submit(options={}){
         status:'failed',
         error:message.slice(0,1000)
       });
+      updateTaskCard(task.id,'فشلت المهمة: '+message,'error');
     }
     add('assistant','تعذر التنفيذ: '+message);
     setStatus('خطأ');
   }finally{
     setBusy(false);
+    currentTaskId=null;
   }
 }
 
