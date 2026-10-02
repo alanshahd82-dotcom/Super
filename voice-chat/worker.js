@@ -1,6 +1,6 @@
 import { pipeline } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1';
 
-const MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
+const MODEL='onnx-community/Qwen2.5-1.5B-Instruct';
 let generator=null;
 let device='wasm';
 
