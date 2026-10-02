@@ -1,4 +1,4 @@
-const CACHE='voice-chat-v7';
+const CACHE='voice-chat-v8';
 const ASSETS=[
   './',
   './index.html',

@@ -23,9 +23,10 @@ try{
   if(Array.isArray(saved)) history=saved.filter(x=>x&&['user','assistant'].includes(x.role)&&typeof x.content==='string').slice(-30);
 }catch{}
 let generator=null;
-let ready=false;
+let ready=true;
 let busy=false;
 let recognition=null;
+let modelIdleTimer=null;
 
 env.backends.onnx.wasm.numThreads=1;
 env.backends.onnx.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0-dev.20250409-89f8206ba4/dist/';
@@ -125,7 +126,12 @@ pairCodeEl.addEventListener('keydown',e=>{
 refreshBridge().catch(()=>setBridgeBadge(false,hasBridgeToken()));
 
 async function loadModel(){
-  setBusy(true);
+  if(modelIdleTimer){
+    clearTimeout(modelIdleTimer);
+    modelIdleTimer=null;
+  }
+  if(generator) return;
+
   const progress=p=>{
     if(!p)return;
     if(p.status==='progress'&&typeof p.progress==='number'){
@@ -139,7 +145,7 @@ async function loadModel(){
 
   if(navigator.gpu){
     try{
-      setStatus('جاري التشغيل على GPU…');
+      setStatus('جاري تشغيل العقل على GPU…');
       generator=await pipeline('text-generation',MODEL,{
         device:'webgpu',
         dtype:'q4f16',
@@ -151,7 +157,7 @@ async function loadModel(){
   }
 
   if(!generator){
-    setStatus('جاري التشغيل على CPU…');
+    setStatus('جاري تشغيل العقل على CPU…');
     generator=await pipeline('text-generation',MODEL,{
       device:'wasm',
       dtype:'int8',
@@ -159,13 +165,23 @@ async function loadModel(){
     });
   }
 
-  ready=true;
-  setBusy(false);
   setStatus('جاهز');
-  input.focus();
+}
+
+function scheduleModelUnload(){
+  if(modelIdleTimer) clearTimeout(modelIdleTimer);
+  modelIdleTimer=setTimeout(async()=>{
+    const old=generator;
+    generator=null;
+    try{
+      if(old&&typeof old.dispose==='function') await old.dispose();
+    }catch{}
+    setStatus('جاهز — العقل يعمل عند الطلب');
+  },120000);
 }
 
 async function generateText(messages,maxNewTokens=520){
+  await loadModel();
   const out=await generator(messages,{
     max_new_tokens:maxNewTokens,
     do_sample:true,
@@ -177,6 +193,7 @@ async function generateText(messages,maxNewTokens=520){
   let answer='';
   if(Array.isArray(generated)) answer=generated.at(-1)?.content||'';
   else answer=String(generated||'');
+  scheduleModelUnload();
   return answer.trim();
 }
 
@@ -420,9 +437,6 @@ if('serviceWorker' in navigator){
   addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 }
 
-setBusy(true);
-loadModel().catch(e=>{
-  add('assistant','تعذر تشغيل النموذج: '+(e?.message||String(e)));
-  setStatus('خطأ');
-  setBusy(false);
-});
+setBusy(false);
+setStatus('جاهز — العقل يعمل عند الطلب');
+input.focus();
