@@ -9,6 +9,16 @@ $EndpointFile = Join-Path $Repo 'voice-chat\bridge-endpoint.json'
 $Cloudflared = 'C:\Program Files (x86)\cloudflared\cloudflared.exe'
 New-Item -ItemType Directory -Force -Path $Runtime | Out-Null
 
+$TransformersModule = Join-Path $PSScriptRoot 'node_modules\@huggingface\transformers'
+if (!(Test-Path $TransformersModule)) {
+  Push-Location $PSScriptRoot
+  try {
+    npm ci --omit=dev | Out-Null
+  } finally {
+    Pop-Location
+  }
+}
+
 function Test-Bridge {
   try {
     $r = Invoke-RestMethod -Uri 'http://127.0.0.1:8788/health' -TimeoutSec 2
