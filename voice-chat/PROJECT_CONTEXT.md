@@ -142,16 +142,26 @@ agent.js يدعم حالياً:
 
 ## 7. آخر إثبات end-to-end
 
-تم اختبار المسار الحقيقي:
-Agent Bridge -> كتابة ملف -> تحقق -> Commit -> Push -> GitHub Pages
+تم اختبار المسار الحقيقي كاملاً:
+Agent discovery -> repo_tree/repo_search/repo_context -> تعديل -> فحوصات أمان -> Commit -> Push -> GitHub Pages -> تحقق من وصول النسخة الحية.
 
-Commit إثبات:
-- c728b35 — Agent: verify autonomous agent bridge
+أحدث إثبات:
+- 425448c — تحقق من secret guard و stale HEAD guard و lazy model architecture.
+- secret guard: PASS
+- stale HEAD guard: PASS
+- GitHub Pages live confirmation: PASS
 
-الملف الذي أنشئ عبر الاختبار:
-- voice-chat/project-state.json
+إثبات سابق:
+- a963dee — تحقق أن الجسر ينتظر حتى تظهر النسخة الجديدة فعلياً على GitHub Pages.
+- 8dc0f34 — تحقق repo_tree + repo_search + repo_context + context-bound write.
+- c728b35 — أول إثبات كتابة/Commit/Push ناجح.
 
-الاختبار أثبت أن مسار القراءة والكتابة والنشر يعمل فعلياً.
+الملفات المرجعية:
+- voice-chat/agent-capabilities.json
+- voice-chat/AGENT_HISTORY.jsonl
+- voice-chat/deploy-state.json
+
+المسار الكامل للقراءة والتعديل والاختبار والنشر والتحقق الحي يعمل فعلياً.
 
 ## 8. الحالة الحالية
 

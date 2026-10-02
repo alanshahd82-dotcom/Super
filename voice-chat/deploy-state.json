@@ -1,9 +1,9 @@
 {
-  "publish_id": "8cd67b81a37cdd7b65477bad",
-  "requested_at": "2026-10-02T16:53:27.300Z",
-  "message": "verify safety guards and lazy model architecture",
+  "publish_id": "5cbb510d2d6a017786304d09",
+  "requested_at": "2026-10-02T16:55:05.108Z",
+  "message": "refresh project context with verified agent milestones",
   "files": [
-    "voice-chat/agent-capabilities.json"
+    "voice-chat/PROJECT_CONTEXT.md"
   ],
-  "base": "029061b0d44811b8d899771226e07846dceb652f"
+  "base": "425448c060f06519d8c8c8b9e53efaf5114ddcb9"
 }
