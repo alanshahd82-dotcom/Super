@@ -431,6 +431,11 @@ async function rollbackLatestAgentChange(body){
     .split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   if(changed.some(rel=>!rel.startsWith('voice-chat/'))) throw new Error('rollback_target_outside_voice_chat');
 
+  const memoryRel='voice-chat/PROJECT_MEMORY.json';
+  const historyRel='voice-chat/AGENT_HISTORY.jsonl';
+  const memoryBefore=await fsp.readFile(path.join(REPO,...memoryRel.split('/')),'utf8').catch(()=>'{}');
+  const historyBefore=await fsp.readFile(path.join(REPO,...historyRel.split('/')),'utf8').catch(()=>'');
+
   let committed=false;
   try{
     await git(['revert','--no-commit',target]);
@@ -453,17 +458,15 @@ async function rollbackLatestAgentChange(body){
     const changedAt=new Date().toISOString();
     const message='rollback '+target.slice(0,7);
 
-    const memoryRel='voice-chat/PROJECT_MEMORY.json';
     let memory={version:1,project:'Super Voice Chat',recent_changes:[]};
-    try{memory={...memory,...JSON.parse(await fsp.readFile(path.join(REPO,...memoryRel.split('/')),'utf8'))};}catch{}
+    try{memory={...memory,...JSON.parse(memoryBefore)}}catch{}
     const memoryChange={at:changedAt,publish_id:publishId,message,files:touched,base:currentHead,rollback_of:target};
     memory.updated_at=changedAt;
     memory.last_change=memoryChange;
     memory.recent_changes=[...(Array.isArray(memory.recent_changes)?memory.recent_changes:[]),memoryChange].slice(-20);
     await fsp.writeFile(path.join(REPO,...memoryRel.split('/')),JSON.stringify(memory,null,2)+'\n','utf8');
 
-    const historyRel='voice-chat/AGENT_HISTORY.jsonl';
-    await fsp.appendFile(path.join(REPO,...historyRel.split('/')),JSON.stringify(memoryChange)+'\n','utf8');
+    await fsp.writeFile(path.join(REPO,...historyRel.split('/')),historyBefore+JSON.stringify(memoryChange)+'\n','utf8');
 
     const deployRel='voice-chat/deploy-state.json';
     await fsp.writeFile(path.join(REPO,...deployRel.split('/')),JSON.stringify({

@@ -28,10 +28,9 @@ function Test-PublicEndpoint {
 
 if (!(Test-Bridge)) {
   Remove-Item $BridgeLog,$BridgeErr -Force -ErrorAction SilentlyContinue
-  Start-Process -WindowStyle Hidden -FilePath 'node.exe' -ArgumentList @(
-    (Join-Path $PSScriptRoot 'server.mjs')
-  ) -WorkingDirectory $PSScriptRoot -RedirectStandardOutput $BridgeLog -RedirectStandardError $BridgeErr
+  Start-Process -WindowStyle Hidden -FilePath 'node.exe' -ArgumentList 'server.mjs' -WorkingDirectory $PSScriptRoot -RedirectStandardOutput $BridgeLog -RedirectStandardError $BridgeErr
   for($i=0;$i -lt 20 -and !(Test-Bridge);$i++){ Start-Sleep -Milliseconds 500 }
+  if (!(Test-Bridge)) { throw 'Bridge failed to start.' }
 }
 
 if (Test-PublicEndpoint) { exit 0 }
@@ -46,8 +45,11 @@ for($i=0;$i -lt 60 -and !$url;$i++){
   Start-Sleep -Milliseconds 500
   foreach($log in @($TunnelLog,$TunnelErr)){
     if(Test-Path $log){
-      $m = [regex]::Match((Get-Content $log -Raw),'https://[a-z0-9-]+\.trycloudflare\.com')
-      if($m.Success){ $url = $m.Value; break }
+      $logText = Get-Content $log -Raw -ErrorAction SilentlyContinue
+      if($logText){
+        $m = [regex]::Match([string]$logText,'https://[a-z0-9-]+\.trycloudflare\.com')
+        if($m.Success){ $url = $m.Value; break }
+      }
     }
   }
 }
