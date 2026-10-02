@@ -158,6 +158,10 @@ agent.js يدعم حالياً:
 Agent discovery -> repo_tree/repo_search/repo_context -> تعديل -> فحوصات أمان -> Commit -> Push -> GitHub Pages -> تحقق من وصول النسخة الحية.
 
 أحدث إثبات:
+- PC inference bridge: READY للدردشة والتطوير عبر النموذجين المحليين المفتوحين.
+- Qwen2.5-Coder-0.5B-Instruct INT8: الحجم 639402903 bytes و SHA-256 = cb62cac8484892079798a70b791d9f1b178735e0456e904011cce52ecd3c8787، مطابق للملف الرسمي، وتم تشغيل inference فعلي على CPU بنجاح.
+- Qwen2.5-0.5B-Instruct INT8: الحجم 512096557 bytes و SHA-256 = 41834041ab1b29eff9fc592f1a29a1844133aea35832ea9fa91682be13016100، مطابق للملف الرسمي.
+- /health على الجسر الجديد يعيد pc_inference.chat=true و pc_inference.dev=true.
 - 851e989 — تحقق أن request_id يمنع تنفيذ نفس مهمة التطوير مرتين بعد إعادة المحاولة.
 - resumable task state: PASS.
 - duplicate/idempotency guard: PASS.
