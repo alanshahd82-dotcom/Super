@@ -1,0 +1,9 @@
+{
+  "publish_id": "c1f1b2642e2b4a9cb18d19bc",
+  "requested_at": "2026-10-02T16:43:58.094Z",
+  "message": "verify live deployment confirmation",
+  "files": [
+    "voice-chat/agent-capabilities.json"
+  ],
+  "base": "dd4de4700e5a43f818fd0acd65ac6e331507eff9"
+}
