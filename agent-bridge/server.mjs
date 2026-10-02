@@ -38,10 +38,16 @@ let modelModulePromise=null;
 let modelIdleTimer=null;
 let inferenceQueue=Promise.resolve();
 
+const MODEL_INT8_BYTES={
+  [CHAT_MODEL]:512096557,
+  [DEV_MODEL]:639402903
+};
+
 async function modelCacheReady(modelId){
   const file=path.join(RUNTIME,'models',...String(modelId).split('/'),'onnx','model_int8.onnx');
   const stat=await fsp.stat(file).catch(()=>null);
-  return !!stat&&stat.isFile()&&stat.size>500000000;
+  const expected=MODEL_INT8_BYTES[modelId];
+  return !!stat&&stat.isFile()&&Number.isFinite(expected)&&stat.size===expected;
 }
 
 async function getTransformers(){
