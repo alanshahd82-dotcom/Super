@@ -1,0 +1,14 @@
+{
+  "project": "Super Voice Chat",
+  "agent_loop": "multi-step",
+  "tools": [
+    "repo_tree",
+    "repo_search",
+    "repo_context",
+    "repo_patch",
+    "repo_write"
+  ],
+  "optimistic_head_guard": true,
+  "automatic_change_history": true,
+  "verified_at": "2026-10-02T16:39:17.282Z"
+}
