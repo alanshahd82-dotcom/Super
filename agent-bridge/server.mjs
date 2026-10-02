@@ -129,6 +129,59 @@ async function getContext(paths){
   }
   const {stdout:head}=await git(['rev-parse','HEAD']);
   return {head,files};
+}
+
+const TEXT_EXT=/\.(?:html?|css|js|mjs|cjs|json|md|txt|webmanifest|svg)$/i;
+
+async function listRepoFiles(){
+  const root=path.join(REPO,'voice-chat');
+  const files=[];
+  async function walk(dir){
+    for(const entry of await fsp.readdir(dir,{withFileTypes:true})){
+      const full=path.join(dir,entry.name);
+      const rel=path.relative(REPO,full).replace(/\\/g,'/');
+      if(entry.isDirectory()){
+        if(files.length<400) await walk(full);
+        continue;
+      }
+      if(!entry.isFile()) continue;
+      const stat=await fsp.stat(full);
+      files.push({path:rel,size:stat.size,text:TEXT_EXT.test(rel)});
+      if(files.length>=400) return;
+    }
+  }
+  await walk(root);
+  const {stdout:head}=await git(['rev-parse','HEAD']);
+  return {head,files};
+}
+
+async function searchRepo(query,paths){
+  const q=String(query||'').trim();
+  if(!q||q.length>120) throw new Error('invalid_search_query');
+  const needle=q.toLowerCase();
+  const candidates=Array.isArray(paths)&&paths.length
+    ? paths.slice(0,20).map(safeRepoPath)
+    : (await listRepoFiles()).files.filter(x=>x.text&&x.size<=180000).map(x=>x.path);
+  const matches=[];
+  for(const rel of candidates){
+    if(matches.length>=30) break;
+    const full=path.join(REPO,...rel.split('/'));
+    let content;
+    try{content=await fsp.readFile(full,'utf8');}catch{continue;}
+    const lines=content.split(/\r?\n/);
+    for(let i=0;i<lines.length&&matches.length<30;i++){
+      const idx=lines[i].toLowerCase().indexOf(needle);
+      if(idx>=0){
+        matches.push({
+          path:rel,
+          line:i+1,
+          excerpt:lines[i].slice(Math.max(0,idx-100),idx+needle.length+180)
+        });
+      }
+    }
+  }
+  const {stdout:head}=await git(['rev-parse','HEAD']);
+  return {head,query:q,matches};
 }async function validateFile(rel){
   const full=path.join(REPO,...rel.split('/'));
   if(/\.(m?js|cjs)$/i.test(rel)){
@@ -143,11 +196,18 @@ async function applyFiles(body){
   const files=Array.isArray(body.files)?body.files:[];
   const edits=Array.isArray(body.edits)?body.edits:[];
   if((!files.length&&!edits.length)||files.length+edits.length>16) throw new Error('invalid_changes');
+
+  const {stdout:currentHead}=await git(['rev-parse','HEAD']);
+  const expectedHead=String(body.expected_head||'').trim();
+  if(!expectedHead) throw new Error('context_required');
+  if(expectedHead!==currentHead) throw new Error('repository_changed');
+
   const dirty=(await git(['status','--porcelain'])).stdout;
   if(dirty) throw new Error('working_tree_not_clean');
 
   const backupMap=new Map();
   const touched=[];
+  let committed=false;
   const backup=async(rel)=>{
     if(backupMap.has(rel)) return;
     const full=path.join(REPO,...rel.split('/'));
@@ -192,7 +252,21 @@ async function applyFiles(body){
     }
 
     const msg=('Agent: '+String(body.message||'self update')).replace(/[\r\n]+/g,' ').slice(0,120);
+
+    const historyRel='voice-chat/AGENT_HISTORY.jsonl';
+    await backup(historyRel);
+    const historyFull=path.join(REPO,...historyRel.split('/'));
+    const historyEntry={
+      at:new Date().toISOString(),
+      message:msg.replace(/^Agent:\s*/,''),
+      files:unique,
+      base:currentHead
+    };
+    await fsp.appendFile(historyFull,JSON.stringify(historyEntry)+'\n','utf8');
+    await git(['add','--',historyRel]);
+
     await git(['commit','-m',msg]);
+    committed=true;
     const {stdout:sha}=await git(['rev-parse','HEAD']);
     try{
       await git(['push','origin','HEAD:main'],{timeout:45000});
@@ -207,10 +281,17 @@ async function applyFiles(body){
     };
   }catch(err){
     try{
-      await git(['reset']);
-      for(const b of backupMap.values()){
-        if(b.existed) await fsp.writeFile(b.full,b.previous);
-        else await fsp.rm(b.full,{force:true});
+      if(committed){
+        await git(['reset','--hard',currentHead]);
+        for(const b of backupMap.values()){
+          if(!b.existed) await fsp.rm(b.full,{force:true});
+        }
+      }else{
+        await git(['reset']);
+        for(const b of backupMap.values()){
+          if(b.existed) await fsp.writeFile(b.full,b.previous);
+          else await fsp.rm(b.full,{force:true});
+        }
       }
     }catch{}
     throw err;
@@ -255,6 +336,17 @@ async function applyFiles(body){
     if(req.method==='POST'&&url.pathname==='/api/context'){
       const body=await readJson(req);
       json(res,200,{ok:true,...await getContext(body.paths)},origin);
+      return;
+    }
+
+    if(req.method==='GET'&&url.pathname==='/api/tree'){
+      json(res,200,{ok:true,...await listRepoFiles()},origin);
+      return;
+    }
+
+    if(req.method==='POST'&&url.pathname==='/api/search'){
+      const body=await readJson(req);
+      json(res,200,{ok:true,...await searchRepo(body.query,body.paths)},origin);
       return;
     }
 

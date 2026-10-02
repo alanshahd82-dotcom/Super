@@ -37,14 +37,19 @@ function saveState(state){
 <agent_action>{"type":"remove_extension","id":"معرف-الأداة"}</agent_action>
 <agent_action>{"type":"remember","key":"اسم","value":"قيمة"}</agent_action>
 
-للتطوير الدائم في GitHub والنشر:
-إذا كنت تحتاج قراءة ملفات المشروع أولًا فاطلبها هكذا:
+للتطوير الدائم في GitHub والنشر لديك أدوات بحث وقراءة وكتابة:
+إذا كنت لا تعرف الملفات الموجودة:
+<agent_action>{"type":"repo_tree"}</agent_action>
+إذا كنت تبحث عن نص أو رمز أو ميزة داخل المشروع:
+<agent_action>{"type":"repo_search","query":"النص المراد البحث عنه"}</agent_action>
+لقراءة ملفات محددة:
 <agent_action>{"type":"repo_context","paths":["voice-chat/index.html","voice-chat/app.js"]}</agent_action>
 بعد أن تحصل على الملفات، نفّذ تعديلًا دقيقًا ويفضل الاستبدال الجراحي:
 <agent_action>{"type":"repo_patch","message":"وصف قصير","edits":[{"path":"voice-chat/app.js","old":"النص المطابق حرفيًا","new":"النص البديل"}]}</agent_action>
 ولإنشاء ملف جديد أو عندما يكون الاستبدال غير مناسب:
 <agent_action>{"type":"repo_write","message":"وصف قصير","files":[{"path":"voice-chat/new-file.js","content":"المحتوى الكامل"}]}</agent_action>
 
+استخدم دورة العمل: اكتشف عند الحاجة -> اقرأ الملفات -> عدّل -> دع النظام يختبر وينشر.
 قبل أي repo_patch أو repo_write يجب أن تقرأ voice-chat/PROJECT_CONTEXT.md ضمن repo_context حتى لا تفقد هدف المشروع أو حالته.
 اقرأ الملف الذي ستعدله قبل تغييره إلا إذا كنت تنشئ ملفًا جديدًا. استخدم paths داخل voice-chat فقط.
 لا تعرض كتل agent_action للمستخدم؛ التطبيق ينفذها ويخفيها.

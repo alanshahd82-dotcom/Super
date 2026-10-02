@@ -73,9 +73,13 @@ agent.js يدعم حالياً:
 - extension
 - remove_extension
 - remember
+- repo_tree
+- repo_search
 - repo_context
 - repo_patch
 - repo_write
+
+دورة العمل الدائمة أصبحت متعددة الخطوات: يستطيع الوكيل استعراض شجرة المشروع، البحث عن رمز/نص، قراءة الملفات، ثم بناء التعديل. القراءة تعيد HEAD الحالي، والكتابة لا تُقبل إلا إذا كان HEAD المتوقع مطابقاً حتى لا يكتب فوق تغيير أحدث.
 
 التغييرات المحلية يمكن حفظها في المتصفح.
 التغييرات الدائمة تمر عبر Agent Bridge إلى GitHub.
@@ -90,14 +94,19 @@ agent.js يدعم حالياً:
 - agent-bridge/watch-bridge.ps1
 
 وظيفته:
-1. قراءة ملفات المشروع.
-2. قبول تغييرات محدودة داخل voice-chat فقط.
-3. التحقق من syntax لملفات JavaScript.
-4. التحقق من JSON/manifest.
-5. تشغيل git diff --check.
-6. Commit.
-7. Push إلى main.
-8. GitHub Pages ينشر النسخة الجديدة.
+1. استعراض ملفات voice-chat عبر repo_tree.
+2. البحث داخل المشروع عبر repo_search.
+3. قراءة الملفات عبر repo_context.
+4. قبول تغييرات محدودة داخل voice-chat فقط.
+5. رفض الكتابة إذا لم تكن مبنية على HEAD تمت قراءته أو إذا تغير المستودع بعد القراءة.
+6. التحقق من syntax لملفات JavaScript.
+7. التحقق من JSON/manifest.
+8. تشغيل git diff --check.
+9. إضافة سجل لكل تغيير فعلي في voice-chat/AGENT_HISTORY.jsonl.
+10. Commit.
+11. Push إلى main.
+12. GitHub Pages ينشر النسخة الجديدة.
+13. إذا فشل Push بعد Commit، يعاد المستودع تلقائياً إلى HEAD السابق بدلاً من ترك حالة نصف منشورة.
 
 الجسر يستمع محلياً على:
 - http://127.0.0.1:8788

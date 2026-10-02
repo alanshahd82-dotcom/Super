@@ -1,6 +1,6 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-3';
-import { bridgeHealth, pairBridge, bridgeContext, bridgeApply, hasBridgeToken } from './bridge.js?v=20261002-1';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-4';
+import { bridgeHealth, pairBridge, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, hasBridgeToken } from './bridge.js?v=20261002-2';
 
 const chat=document.querySelector('#chat');
 const input=document.querySelector('#input');
@@ -180,42 +180,95 @@ async function generateText(messages,maxNewTokens=520){
   return answer.trim();
 }
 
+function isRepoReadAction(action){
+  return ['repo_context','repo_tree','repo_search'].includes(action?.type);
+}
+
+function isRepoWriteAction(action){
+  return ['repo_patch','repo_write'].includes(action?.type);
+}
+
 function isRepoAction(action){
-  return ['repo_context','repo_patch','repo_write'].includes(action?.type);
+  return isRepoReadAction(action)||isRepoWriteAction(action);
+}
+
+function formatContextResult(ctx){
+  return (ctx.files||[]).map(f=>{
+    if(f.missing) return 'FILE '+f.path+' [MISSING]';
+    if(f.error) return 'FILE '+f.path+' ['+f.error+']';
+    return 'FILE '+f.path+'\n---\n'+f.content+'\n---';
+  }).join('\n\n');
 }
 
 async function executeAgentPlan(parsed,modelMessages){
-  let current=parsed;
   let actions=[...parsed.actions];
   let visible=parsed.clean;
   const notes=[];
+  let lastRepoHead=null;
+  let workingMessages=[...modelMessages];
 
-  const contextActions=actions.filter(a=>a?.type==='repo_context');
-  if(contextActions.length){
+  for(let round=0;round<3;round++){
+    let readActions=actions.filter(isRepoReadAction);
+    const writeActions=actions.filter(isRepoWriteAction);
+
+    if(!readActions.length&&writeActions.length&&!lastRepoHead){
+      const targets=[
+        ...writeActions.flatMap(a=>Array.isArray(a.edits)?a.edits.map(x=>x.path):[]),
+        ...writeActions.flatMap(a=>Array.isArray(a.files)?a.files.map(x=>x.path):[])
+      ].filter(Boolean);
+      readActions=[{
+        type:'repo_context',
+        paths:['voice-chat/PROJECT_CONTEXT.md',...targets]
+      }];
+    }
+
+    if(!readActions.length) break;
+
     const state=await refreshBridge();
     if(!state.online||!hasBridgeToken()){
       if(state.online) showPairModal();
       notes.push(state.online?'يلزم ربط GitHub مرة واحدة لإكمال التطوير الدائم.':'جسر التطوير غير متصل حاليًا.');
-    }else{
-      const paths=[...new Set(['voice-chat/PROJECT_CONTEXT.md',...contextActions.flatMap(a=>Array.isArray(a.paths)?a.paths:[])])].slice(0,10);
-      setStatus('يقرأ ملفات المشروع…');
-      const ctx=await bridgeContext(paths);
-      const contextText=(ctx.files||[]).map(f=>{
-        if(f.missing) return 'FILE '+f.path+' [MISSING]';
-        if(f.error) return 'FILE '+f.path+' ['+f.error+']';
-        return 'FILE '+f.path+'\n---\n'+f.content+'\n---';
-      }).join('\n\n');
-      const followMessages=[
-        ...modelMessages,
-        {role:'assistant',content:parsed.clean||'أحتاج قراءة ملفات المشروع قبل التنفيذ.'},
-        {role:'system',content:'هذه هي ملفات المشروع التي طلبتها. أكمل طلب المستخدم الآن. نفّذ التعديل باستخدام repo_patch أو repo_write، ولا تطلب الملفات نفسها مرة أخرى.\n\n'+contextText}
-      ];
-      setStatus('يبني التعديل…');
-      const followAnswer=await generateText(followMessages,760);
-      current=parseAgentOutput(followAnswer);
-      actions=[...actions.filter(a=>a?.type!=='repo_context'),...current.actions];
-      if(current.clean) visible=current.clean;
+      actions=actions.filter(a=>!isRepoAction(a));
+      break;
     }
+
+    const toolResults=[];
+    for(const action of readActions){
+      if(action.type==='repo_context'){
+        const paths=[...new Set(['voice-chat/PROJECT_CONTEXT.md',...(Array.isArray(action.paths)?action.paths:[])])].slice(0,10);
+        setStatus('يقرأ ملفات المشروع…');
+        const ctx=await bridgeContext(paths);
+        lastRepoHead=ctx.head||lastRepoHead;
+        toolResults.push('CONTEXT HEAD '+ctx.head+'\n'+formatContextResult(ctx));
+      }else if(action.type==='repo_tree'){
+        setStatus('يفحص ملفات المشروع…');
+        const tree=await bridgeTree();
+        lastRepoHead=tree.head||lastRepoHead;
+        const listing=(tree.files||[]).map(f=>f.path+' ('+f.size+' bytes)').join('\n');
+        toolResults.push('PROJECT TREE HEAD '+tree.head+'\n'+listing);
+      }else if(action.type==='repo_search'){
+        setStatus('يبحث داخل المشروع…');
+        const found=await bridgeSearch(action.query,action.paths);
+        lastRepoHead=found.head||lastRepoHead;
+        const matches=(found.matches||[]).map(m=>m.path+':'+m.line+' '+m.excerpt).join('\n');
+        toolResults.push('SEARCH "'+found.query+'" HEAD '+found.head+'\n'+(matches||'[NO MATCHES]'));
+      }
+    }
+
+    workingMessages=[
+      ...workingMessages,
+      {role:'assistant',content:visible||'أحتاج معلومات من المشروع قبل التنفيذ.'},
+      {
+        role:'system',
+        content:'نتائج أدوات المشروع أدناه. واصل تنفيذ طلب المستخدم. إذا أصبحت المعلومات كافية، أخرج repo_patch أو repo_write. إذا ما زلت تحتاج معلومات، استخدم repo_tree أو repo_search أو repo_context فقط للخطوة التالية.\n\n'+toolResults.join('\n\n')
+      }
+    ];
+
+    setStatus('يحلل المشروع…');
+    const followAnswer=await generateText(workingMessages,760);
+    const next=parseAgentOutput(followAnswer);
+    actions=[...next.actions];
+    if(next.clean) visible=next.clean;
   }
 
   const localActions=actions.filter(a=>!isRepoAction(a));
@@ -229,14 +282,25 @@ async function executeAgentPlan(parsed,modelMessages){
     if(!state.online||!hasBridgeToken()){
       if(state.online) showPairModal();
       notes.push(state.online?'يلزم ربط GitHub مرة واحدة قبل النشر.':'جسر التطوير غير متصل حاليًا.');
+    }else if(!lastRepoHead){
+      notes.push('لم يتم نشر التعديل لأن الوكيل لم يقرأ سياق المشروع أولًا.');
     }else{
       const edits=repoPatches.flatMap(a=>Array.isArray(a.edits)?a.edits:[]).slice(0,16);
       const files=repoWrites.flatMap(a=>Array.isArray(a.files)?a.files:[]).slice(0,12);
       const message=[...repoPatches,...repoWrites].map(a=>a.message).find(Boolean)||'self update';
       setStatus('يختبر وينشر…');
-      const result=await bridgeApply({message,edits,files});
-      if(result.no_changes) notes.push('لم تكن هناك تغييرات جديدة للنشر.');
-      else if(result.commit) notes.push('تم اختبار التعديل ونشره على GitHub: '+result.commit.slice(0,7));
+      const result=await bridgeApply({
+        message,
+        edits,
+        files,
+        expected_head:lastRepoHead
+      });
+      if(result.no_changes){
+        notes.push('لم تكن هناك تغييرات جديدة للنشر.');
+      }else if(result.commit){
+        notes.push('تم الاختبار والنشر على GitHub: '+result.commit.slice(0,7));
+        if(result.live_url) notes.push('النسخة المنشورة: '+result.live_url);
+      }
       await refreshBridge();
     }
   }

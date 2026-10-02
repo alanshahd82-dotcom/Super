@@ -64,6 +64,21 @@ export async function bridgeContext(paths){
   });
 }
 
+export async function bridgeTree(){
+  return request('/api/tree',{auth:true});
+}
+
+export async function bridgeSearch(query,paths){
+  return request('/api/search',{
+    method:'POST',
+    auth:true,
+    body:{
+      query:String(query||''),
+      paths:Array.isArray(paths)?paths:[]
+    }
+  });
+}
+
 export async function bridgeApply(payload){
   return request('/api/apply',{
     method:'POST',
