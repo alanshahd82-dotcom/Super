@@ -41,7 +41,7 @@ let inferenceQueue=Promise.resolve();
 async function modelCacheReady(modelId){
   const file=path.join(RUNTIME,'models',...String(modelId).split('/'),'onnx','model_int8.onnx');
   const stat=await fsp.stat(file).catch(()=>null);
-  return !!stat&&stat.isFile()&&stat.size>100000000;
+  return !!stat&&stat.isFile()&&stat.size>500000000;
 }
 
 async function getTransformers(){
