@@ -1,5 +1,5 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-2';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI } from './agent.js?v=20261002-3';
 import { bridgeHealth, pairBridge, bridgeContext, bridgeApply, hasBridgeToken } from './bridge.js?v=20261002-1';
 
 const chat=document.querySelector('#chat');
@@ -197,7 +197,7 @@ async function executeAgentPlan(parsed,modelMessages){
       if(state.online) showPairModal();
       notes.push(state.online?'يلزم ربط GitHub مرة واحدة لإكمال التطوير الدائم.':'جسر التطوير غير متصل حاليًا.');
     }else{
-      const paths=[...new Set(contextActions.flatMap(a=>Array.isArray(a.paths)?a.paths:[]))].slice(0,10);
+      const paths=[...new Set(['voice-chat/PROJECT_CONTEXT.md',...contextActions.flatMap(a=>Array.isArray(a.paths)?a.paths:[])])].slice(0,10);
       setStatus('يقرأ ملفات المشروع…');
       const ctx=await bridgeContext(paths);
       const contextText=(ctx.files||[]).map(f=>{

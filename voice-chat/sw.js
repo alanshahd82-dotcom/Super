@@ -1,4 +1,4 @@
-const CACHE='voice-chat-v4';
+const CACHE='voice-chat-v5';
 const ASSETS=[
   './',
   './index.html',
@@ -6,6 +6,7 @@ const ASSETS=[
   './agent.js',
   './bridge.js',
   './bridge-endpoint.json',
+  './PROJECT_CONTEXT.md',
   './manifest.webmanifest',
   './icon-192.png',
   './icon-512.png'

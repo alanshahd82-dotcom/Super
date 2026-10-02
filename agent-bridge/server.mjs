@@ -21,6 +21,7 @@ const ALLOWED_ORIGINS=new Set([
 ]);
 const MAX_BODY=900000;
 const DEFAULT_CONTEXT=[
+  'voice-chat/PROJECT_CONTEXT.md',
   'voice-chat/index.html',
   'voice-chat/app.js',
   'voice-chat/agent.js',
