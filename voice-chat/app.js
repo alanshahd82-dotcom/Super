@@ -47,7 +47,12 @@ worker.onmessage=({data})=>{
     add('assistant','تعذر تشغيل النموذج: '+data.message);
     statusEl.textContent='خطأ';setBusy(false);
   }
-};function submit(){
+};
+worker.onerror=(e)=>{
+  add('assistant','تعذر تشغيل النموذج: '+(e.message||'خطأ غير معروف'));
+  statusEl.textContent='خطأ';setBusy(false);
+};
+function submit(){
   const text=input.value.trim();
   if(!text||busy||!ready)return;
   history.push({role:'user',content:text});

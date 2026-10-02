@@ -27,7 +27,7 @@ async function load(hasWebGPU){
     }
   }  if(!generator){
     postMessage({type:'status',text:'جاري التشغيل على CPU…'});
-    generator=await pipeline('text-generation',MODEL,{device:'wasm',dtype:'q8',progress_callback:progress});
+    generator=await pipeline('text-generation',MODEL,{dtype:'q8',progress_callback:progress});
     device='wasm';
   }
   postMessage({type:'ready',device});
