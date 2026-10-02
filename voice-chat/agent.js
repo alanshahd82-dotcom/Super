@@ -48,9 +48,12 @@ function saveState(state){
 <agent_action>{"type":"repo_patch","message":"وصف قصير","edits":[{"path":"voice-chat/app.js","old":"النص المطابق حرفيًا","new":"النص البديل"}]}</agent_action>
 ولإنشاء ملف جديد أو عندما يكون الاستبدال غير مناسب:
 <agent_action>{"type":"repo_write","message":"وصف قصير","files":[{"path":"voice-chat/new-file.js","content":"المحتوى الكامل"}]}</agent_action>
+إذا طلب المستخدم صراحة التراجع عن آخر تغيير نفذه الوكيل:
+<agent_action>{"type":"repo_rollback"}</agent_action>
+لا تستخدم repo_rollback من تلقاء نفسك ولا بسبب تخمين؛ يجب أن يكون طلب التراجع صريحاً من المستخدم.
 
 استخدم دورة العمل: اكتشف عند الحاجة -> اقرأ الملفات -> عدّل -> دع النظام يختبر وينشر.
-قبل أي repo_patch أو repo_write يجب أن تقرأ voice-chat/PROJECT_CONTEXT.md و voice-chat/PROJECT_MEMORY.json ضمن repo_context حتى لا تفقد هدف المشروع أو آخر ما تم بناؤه.
+قبل أي repo_patch أو repo_write أو repo_rollback يجب أن تقرأ voice-chat/PROJECT_CONTEXT.md و voice-chat/PROJECT_MEMORY.json ضمن repo_context حتى لا تفقد هدف المشروع أو آخر ما تم بناؤه.
 اقرأ الملف الذي ستعدله قبل تغييره إلا إذا كنت تنشئ ملفًا جديدًا. استخدم paths داخل voice-chat فقط.
 لا تعرض كتل agent_action للمستخدم؛ التطبيق ينفذها ويخفيها.
 الأداة extension تعمل داخل iframe معزول ويمكنها إنشاء واجهات وحسابات واستخدام fetch لخدمات تسمح بالاتصال من المتصفح.
@@ -60,7 +63,7 @@ function saveState(state){
 
 const ACTION_TYPES=new Set([
   'ui_patch','extension','remove_extension','remember',
-  'repo_tree','repo_search','repo_context','repo_patch','repo_write'
+  'repo_tree','repo_search','repo_context','repo_patch','repo_write','repo_rollback'
 ]);
 
 export function parseAgentOutput(text){
@@ -82,6 +85,10 @@ export function looksLikeDevelopmentRequest(text){
   const verbs=/(أضف|اضف|ضيف|حسّن|حسن|طوّر|طور|عدّل|عدل|غيّر|غير|اربط|أنشئ|انشئ|ابن[ِى]?|حوّل|حول|ثبّت|ثبت|احذف|أزل|ازل|أصلح|اصلح|صمّم|صمم|ادمج|ادمج|انشر|حدّث|حدث|add|improve|change|modify|edit|build|create|connect|integrate|deploy|fix|remove|delete|redesign)/i;
   const targets=/(التطبيق|الدردشة|الشات|الواجهة|المشروع|الموقع|صفحة|زر|كاميرا|جيتهاب|github|قاعدة|تكامل|ميزة|ملف|كود|نفسك|app|chat|ui|project|site|page|button|camera|database|integration|feature|file|code|yourself)/i;
   return verbs.test(s)&&(targets.test(s)||s.length<140);
+}
+
+export function looksLikeRollbackRequest(text){
+  return /(تراجع|ارجع|أرجع|استرجع|ألغِ|الغي|إلغاء آخر تعديل|rollback|revert|undo)/i.test(String(text||''));
 }
 
 export function buildRecoveryInstruction(userText,previousAnswer,reason='missing_action'){

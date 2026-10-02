@@ -411,7 +411,102 @@ async function applyFiles(body){
     }catch{}
     throw err;
   }
-}const server=http.createServer(async(req,res)=>{
+}
+
+async function rollbackLatestAgentChange(body){
+  const {stdout:currentHead}=await git(['rev-parse','HEAD']);
+  const expectedHead=String(body.expected_head||'').trim();
+  if(!expectedHead) throw new Error('context_required');
+  if(expectedHead!==currentHead) throw new Error('repository_changed');
+
+  const dirty=(await git(['status','--porcelain'])).stdout;
+  if(dirty) throw new Error('working_tree_not_clean');
+
+  const log=(await git(['log','-50','--format=%H%x09%s'])).stdout.split(/\r?\n/).filter(Boolean);
+  const row=log.map(line=>line.split('\t')).find(parts=>String(parts[1]||'').startsWith('Agent:'));
+  if(!row) throw new Error('no_agent_commit_to_rollback');
+  const target=row[0];
+
+  const changed=(await git(['show','--pretty=format:','--name-only',target])).stdout
+    .split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(changed.some(rel=>!rel.startsWith('voice-chat/'))) throw new Error('rollback_target_outside_voice_chat');
+
+  let committed=false;
+  try{
+    await git(['revert','--no-commit',target]);
+
+    const touched=(await git(['diff','--name-only'])).stdout.split(/\r?\n/).filter(Boolean);
+    if(!touched.length){
+      await git(['reset','--hard',currentHead]);
+      return {ok:true,no_changes:true,target};
+    }
+
+    for(const rel of touched){
+      const full=path.join(REPO,...rel.split('/'));
+      const stat=await fsp.stat(full).catch(()=>null);
+      if(stat?.isFile()) await validateFile(rel);
+    }
+    await validateProject(touched);
+    await git(['diff','--check']);
+
+    const publishId=crypto.randomBytes(12).toString('hex');
+    const changedAt=new Date().toISOString();
+    const message='rollback '+target.slice(0,7);
+
+    const memoryRel='voice-chat/PROJECT_MEMORY.json';
+    let memory={version:1,project:'Super Voice Chat',recent_changes:[]};
+    try{memory={...memory,...JSON.parse(await fsp.readFile(path.join(REPO,...memoryRel.split('/')),'utf8'))};}catch{}
+    const memoryChange={at:changedAt,publish_id:publishId,message,files:touched,base:currentHead,rollback_of:target};
+    memory.updated_at=changedAt;
+    memory.last_change=memoryChange;
+    memory.recent_changes=[...(Array.isArray(memory.recent_changes)?memory.recent_changes:[]),memoryChange].slice(-20);
+    await fsp.writeFile(path.join(REPO,...memoryRel.split('/')),JSON.stringify(memory,null,2)+'\n','utf8');
+
+    const historyRel='voice-chat/AGENT_HISTORY.jsonl';
+    await fsp.appendFile(path.join(REPO,...historyRel.split('/')),JSON.stringify(memoryChange)+'\n','utf8');
+
+    const deployRel='voice-chat/deploy-state.json';
+    await fsp.writeFile(path.join(REPO,...deployRel.split('/')),JSON.stringify({
+      publish_id:publishId,
+      requested_at:changedAt,
+      message,
+      files:touched,
+      base:currentHead,
+      rollback_of:target
+    },null,2)+'\n','utf8');
+
+    await git(['add','--',...new Set([...touched,memoryRel,historyRel,deployRel])]);
+    await git(['commit','-m','Agent: rollback '+target.slice(0,7)]);
+    committed=true;
+    const {stdout:sha}=await git(['rev-parse','HEAD']);
+
+    try{
+      await git(['push','origin','HEAD:main'],{timeout:45000});
+    }catch(pushError){
+      throw new Error('push_failed: '+(pushError.stderr||pushError.message));
+    }
+
+    const deployment=await waitForPagesDeployment(publishId);
+    return {
+      ok:true,
+      commit:sha,
+      rolled_back:target,
+      files:touched,
+      publish_id:publishId,
+      deployed:deployment.deployed,
+      deploy_wait_ms:deployment.wait_ms,
+      live_url:'https://alanshahd82-dotcom.github.io/Super/voice-chat/?commit='+sha.slice(0,12)
+    };
+  }catch(err){
+    try{
+      await git(['reset','--hard',currentHead]);
+      try{await git(['revert','--abort']);}catch{}
+    }catch{}
+    throw err;
+  }
+}
+
+const server=http.createServer(async(req,res)=>{
   const origin=String(req.headers.origin||'');
   if(req.method==='OPTIONS'){
     corsPreflight(req,res,origin);
@@ -468,6 +563,12 @@ async function applyFiles(body){
     if(req.method==='POST'&&url.pathname==='/api/apply'){
       const body=await readJson(req);
       json(res,200,await applyFiles(body),origin);
+      return;
+    }
+
+    if(req.method==='POST'&&url.pathname==='/api/rollback'){
+      const body=await readJson(req);
+      json(res,200,await rollbackLatestAgentChange(body),origin);
       return;
     }
 

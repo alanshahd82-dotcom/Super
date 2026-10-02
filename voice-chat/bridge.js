@@ -87,6 +87,14 @@ export async function bridgeApply(payload){
   });
 }
 
+export async function bridgeRollback(expectedHead){
+  return request('/api/rollback',{
+    method:'POST',
+    auth:true,
+    body:{expected_head:String(expectedHead||'')}
+  });
+}
+
 export async function bridgeStatus(){
   return request('/api/status',{auth:true});
 }

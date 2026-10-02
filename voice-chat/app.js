@@ -1,6 +1,6 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, looksLikeDevelopmentRequest, buildRecoveryInstruction } from './agent.js?v=20261002-7';
-import { bridgeHealth, pairBridge, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, hasBridgeToken } from './bridge.js?v=20261002-2';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, looksLikeDevelopmentRequest, looksLikeRollbackRequest, buildRecoveryInstruction } from './agent.js?v=20261002-8';
+import { bridgeHealth, pairBridge, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, bridgeRollback, hasBridgeToken } from './bridge.js?v=20261002-3';
 
 const chat=document.querySelector('#chat');
 const input=document.querySelector('#input');
@@ -202,7 +202,7 @@ function isRepoReadAction(action){
 }
 
 function isRepoWriteAction(action){
-  return ['repo_patch','repo_write'].includes(action?.type);
+  return ['repo_patch','repo_write','repo_rollback'].includes(action?.type);
 }
 
 function isRepoAction(action){
@@ -219,7 +219,7 @@ function formatContextResult(ctx){
 
 async function recoverInitialPlan(userText,modelMessages,answer){
   let parsed=parseAgentOutput(answer);
-  if(parsed.actions.length||!looksLikeDevelopmentRequest(userText)) return parsed;
+  if(parsed.actions.length||!(looksLikeDevelopmentRequest(userText)||looksLikeRollbackRequest(userText))) return parsed;
   let previous=answer;
   for(let attempt=1;attempt<=2;attempt++){
     setStatus('يعيد التخطيط… '+attempt+'/2');
@@ -288,7 +288,8 @@ async function executeAgentPlan(parsed,modelMessages,userText){
   let actions=[...parsed.actions];
   let visible=parsed.clean;
   const notes=[];
-  const devIntent=looksLikeDevelopmentRequest(userText);
+  const rollbackIntent=looksLikeRollbackRequest(userText);
+  const devIntent=looksLikeDevelopmentRequest(userText)||rollbackIntent;
   let lastRepoHead=null;
   let workingMessages=[...modelMessages];
 
@@ -345,7 +346,7 @@ async function executeAgentPlan(parsed,modelMessages,userText){
       {role:'assistant',content:visible||'أحتاج معلومات من المشروع قبل التنفيذ.'},
       {
         role:'system',
-        content:'نتائج أدوات المشروع أدناه. واصل تنفيذ طلب المستخدم. إذا أصبحت المعلومات كافية، أخرج repo_patch أو repo_write. إذا ما زلت تحتاج معلومات، استخدم repo_tree أو repo_search أو repo_context فقط للخطوة التالية.\n\n'+toolResults.join('\n\n')
+        content:'نتائج أدوات المشروع أدناه. واصل تنفيذ طلب المستخدم. إذا أصبحت المعلومات كافية، أخرج repo_patch أو repo_write، أو repo_rollback فقط إذا طلب المستخدم التراجع صراحة. إذا ما زلت تحتاج معلومات، استخدم repo_tree أو repo_search أو repo_context فقط للخطوة التالية.\n\n'+toolResults.join('\n\n')
       }
     ];
 
@@ -360,11 +361,16 @@ async function executeAgentPlan(parsed,modelMessages,userText){
     setStatus('يحوّل الخطة إلى تنفيذ…');
     const forced=await generateText([
       ...workingMessages,
-      {role:'system',content:'انتهت مرحلة القراءة. لا تطلب قراءة أخرى. نفّذ طلب المستخدم الآن بإخراج repo_patch أو repo_write صالح مبني على المعلومات التي لديك. إذا يوجد مانع تقني حقيقي، اذكره باختصار.'}
+      {role:'system',content:'انتهت مرحلة القراءة. لا تطلب قراءة أخرى. نفّذ طلب المستخدم الآن بإخراج repo_patch أو repo_write صالح، أو repo_rollback فقط إذا كان المستخدم قد طلب التراجع صراحة. إذا يوجد مانع تقني حقيقي، اذكره باختصار.'}
     ],900);
     const forcedParsed=parseAgentOutput(forced);
     if(forcedParsed.actions.length) actions=[...forcedParsed.actions];
     if(forcedParsed.clean) visible=forcedParsed.clean;
+  }
+
+  if(!rollbackIntent&&actions.some(a=>a?.type==='repo_rollback')){
+    actions=actions.filter(a=>a?.type!=='repo_rollback');
+    notes.push('تم تجاهل أمر تراجع لم يطلبه المستخدم صراحة.');
   }
 
   const localActions=actions.filter(a=>!isRepoAction(a));
@@ -373,7 +379,8 @@ async function executeAgentPlan(parsed,modelMessages,userText){
 
   const repoPatches=actions.filter(a=>a?.type==='repo_patch');
   const repoWrites=actions.filter(a=>a?.type==='repo_write');
-  if(repoPatches.length||repoWrites.length){
+  const repoRollbacks=actions.filter(a=>a?.type==='repo_rollback');
+  if(repoPatches.length||repoWrites.length||repoRollbacks.length){
     const state=await refreshBridge();
     if(!state.online||!hasBridgeToken()){
       if(state.online) showPairModal();
@@ -381,24 +388,33 @@ async function executeAgentPlan(parsed,modelMessages,userText){
     }else if(!lastRepoHead){
       notes.push('لم يتم نشر التعديل لأن الوكيل لم يقرأ سياق المشروع أولًا.');
     }else{
-      const applied=await applyRepoChangesWithRepair(
-        repoPatches,
-        repoWrites,
-        lastRepoHead,
-        workingMessages,
-        visible
-      );
-      const result=applied.result;
-      if(applied.visible) visible=applied.visible;
-      if(result.no_changes){
-        notes.push('لم تكن هناك تغييرات جديدة للنشر.');
-      }else if(result.commit){
-        notes.push('تم الاختبار ورفع التعديل إلى GitHub: '+result.commit.slice(0,7));
-        if(result.deployed){
-          notes.push('تم التأكد أن GitHub Pages نشر النسخة الجديدة فعليًا.');
-        }else{
-          notes.push('تم رفع التعديل، لكن لم يصل تأكيد GitHub Pages ضمن مهلة التحقق.');
+      let result=null;
+      if(repoRollbacks.length){
+        setStatus('يتراجع عن آخر تغيير للوكيل…');
+        result=await bridgeRollback(lastRepoHead);
+        if(result.no_changes){
+          notes.push('لا يوجد تغيير فعلي للتراجع عنه.');
+        }else if(result.commit){
+          notes.push('تم التراجع عن التغيير '+String(result.rolled_back||'').slice(0,7)+' في Commit جديد: '+result.commit.slice(0,7));
         }
+      }else{
+        const applied=await applyRepoChangesWithRepair(
+          repoPatches,
+          repoWrites,
+          lastRepoHead,
+          workingMessages,
+          visible
+        );
+        result=applied.result;
+        if(applied.visible) visible=applied.visible;
+        if(result.no_changes){
+          notes.push('لم تكن هناك تغييرات جديدة للنشر.');
+        }else if(result.commit){
+          notes.push('تم الاختبار ورفع التعديل إلى GitHub: '+result.commit.slice(0,7));
+        }
+      }
+      if(result?.commit){
+        notes.push(result.deployed?'تم التأكد أن GitHub Pages نشر النسخة الجديدة فعليًا.':'تم الرفع، لكن لم يصل تأكيد النشر الحي ضمن مهلة التحقق.');
         if(result.live_url) notes.push('النسخة المنشورة: '+result.live_url);
       }
       await refreshBridge();
