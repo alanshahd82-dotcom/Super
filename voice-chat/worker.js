@@ -44,10 +44,8 @@ self.onmessage=async({data})=>{
       const messages=(data.messages||[]).slice(-16);
       const out=await generator(messages,{
         max_new_tokens:256,
-        do_sample:true,
-        temperature:0.7,
-        top_p:0.8,
-        repetition_penalty:1.08
+        do_sample:false,
+        repetition_penalty:1.05
       });      const generated=out?.[0]?.generated_text;
       let text='';
       if(Array.isArray(generated)) text=generated.at(-1)?.content||'';
