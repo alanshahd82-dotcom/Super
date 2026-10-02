@@ -110,13 +110,20 @@ async function generateOnBridge(body){
 
   const run=async()=>{
     const generator=await getModelPipeline(mode);
-    const output=await generator(messages,{
-      max_new_tokens:maxNew,
-      do_sample:true,
-      temperature:0.65,
-      top_p:0.9,
-      repetition_penalty:1.05
-    });
+    const generationOptions=mode==='dev'
+      ? {
+          max_new_tokens:maxNew,
+          do_sample:false,
+          repetition_penalty:1.05
+        }
+      : {
+          max_new_tokens:maxNew,
+          do_sample:true,
+          temperature:0.65,
+          top_p:0.9,
+          repetition_penalty:1.05
+        };
+    const output=await generator(messages,generationOptions);
     scheduleModelDispose();
     return {
       ok:true,
