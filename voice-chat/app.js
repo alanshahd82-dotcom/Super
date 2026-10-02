@@ -1,14 +1,20 @@
+import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
+
 const chat=document.querySelector('#chat');
 const input=document.querySelector('#input');
 const send=document.querySelector('#send');
 const mic=document.querySelector('#mic');
 const statusEl=document.querySelector('#status');
-const worker=new Worker('./worker.js?v=20261002-4',{type:'module'});
-worker.onerror=(e)=>{statusEl.textContent='خطأ تحميل النموذج';add('assistant','خطأ تحميل النموذج: '+(e.message||'غير معروف'));setBusy(false);};
-setInterval(()=>{document.title=(statusEl.textContent||'دردشة محلية')+' | دردشة محلية';},1000);
+
+const MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
 const history=[];
-let ready=false,busy=false;
+let generator=null;
+let ready=false;
+let busy=false;
 let recognition=null;
+
+env.backends.onnx.wasm.numThreads=1;
+env.backends.onnx.wasm.wasmPaths='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0-dev.20250409-89f8206ba4/dist/';
 
 function add(role,text){
   const el=document.createElement('div');
@@ -18,54 +24,103 @@ function add(role,text){
   chat.scrollTop=chat.scrollHeight;
   return el;
 }
+
 function setBusy(v){
   busy=v;
   send.disabled=v||!ready;
   mic.disabled=v;
 }
+
+function setStatus(text){
+  statusEl.textContent=text;
+  document.title=text+' | دردشة محلية';
+}
+
 function resize(){
   input.style.height='auto';
   input.style.height=Math.min(input.scrollHeight,140)+'px';
-}input.addEventListener('input',resize);
-input.addEventListener('keydown',e=>{
-  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();submit();}
-});
-worker.onmessage=({data})=>{
-  if(data.type==='status') statusEl.textContent=data.text;
-  if(data.type==='ready'){
-    ready=true;setBusy(false);
-    statusEl.textContent=data.device==='webgpu'?'جاهز — GPU':'جاهز — CPU';
-    input.focus();
+}
+
+async function loadModel(){
+  setBusy(true);
+  const progress=p=>{
+    if(!p)return;
+    if(p.status==='progress'&&typeof p.progress==='number'){
+      setStatus('تنزيل النموذج… '+Math.round(p.progress)+'%');
+    }else if(p.status==='initiate'){
+      setStatus('جاري تنزيل ملفات النموذج…');
+    }else if(p.status==='ready'){
+      setStatus('جاري تشغيل النموذج…');
+    }
+  };
+
+  if(navigator.gpu){
+    try{
+      setStatus('جاري التشغيل على GPU…');
+      generator=await pipeline('text-generation',MODEL,{
+        device:'webgpu',
+        dtype:'q4f16',
+        progress_callback:progress
+      });
+    }catch(e){
+      generator=null;
+    }
   }
-  if(data.type==='answer'){
-    const text=(data.text||'').trim();
-    history.push({role:'assistant',content:text});
-    add('assistant',text||'…');
-    setBusy(false);statusEl.textContent='جاهز';
-    speak(text);
+
+  if(!generator){
+    setStatus('جاري التشغيل على CPU…');
+    generator=await pipeline('text-generation',MODEL,{
+      device:'wasm',
+      dtype:'int8',
+      progress_callback:progress
+    });
   }
-  if(data.type==='error'){
-    add('assistant','تعذر تشغيل النموذج: '+data.message);
-    statusEl.textContent='خطأ';setBusy(false);
-  }
-};
-worker.onerror=(e)=>{
-  add('assistant','تعذر تشغيل النموذج: '+(e.message||'خطأ غير معروف'));
-  statusEl.textContent='خطأ';setBusy(false);
-};
-function submit(){
+
+  ready=true;
+  setBusy(false);
+  setStatus('جاهز');
+  input.focus();
+}
+
+async function submit(){
   const text=input.value.trim();
   if(!text||busy||!ready)return;
+
   history.push({role:'user',content:text});
   add('user',text);
-  input.value='';resize();
-  setBusy(true);statusEl.textContent='يفكر…';
-  worker.postMessage({type:'generate',messages:history});
+  input.value='';
+  resize();
+  setBusy(true);
+  setStatus('يفكر…');
+
+  try{
+    await new Promise(r=>requestAnimationFrame(r));
+    const out=await generator(history.slice(-12),{
+      max_new_tokens:192,
+      do_sample:true,
+      temperature:0.7,
+      top_p:0.9,
+      repetition_penalty:1.05
+    });
+    const generated=out?.[0]?.generated_text;
+    let answer='';
+    if(Array.isArray(generated)) answer=generated.at(-1)?.content||'';
+    else answer=String(generated||'');
+    answer=answer.trim();
+    history.push({role:'assistant',content:answer});
+    add('assistant',answer||'…');
+    speak(answer);
+    setStatus('جاهز');
+  }catch(e){
+    add('assistant','تعذر تشغيل النموذج: '+(e?.message||String(e)));
+    setStatus('خطأ');
+  }finally{
+    setBusy(false);
+  }
 }
-send.addEventListener('click',submit);
 
 function speak(text){
-  if(!text||!('speechSynthesis'in window))return;
+  if(!text||!('speechSynthesis' in window))return;
   speechSynthesis.cancel();
   const u=new SpeechSynthesisUtterance(text);
   const voices=speechSynthesis.getVoices();
@@ -73,28 +128,54 @@ function speak(text){
   u.lang=u.voice?.lang||'ar-MA';
   u.rate=1;
   speechSynthesis.speak(u);
-}const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+}
+
+input.addEventListener('input',resize);
+input.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&!e.shiftKey){
+    e.preventDefault();
+    submit();
+  }
+});
+send.addEventListener('click',submit);
+
+const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
 if(SR){
   recognition=new SR();
   recognition.lang='ar-MA';
   recognition.interimResults=true;
   recognition.continuous=false;
   let finalText='';
-  recognition.onstart=()=>{mic.classList.add('listening');statusEl.textContent='أسمعك…';finalText='';};
+
+  recognition.onstart=()=>{
+    mic.classList.add('listening');
+    setStatus('أسمعك…');
+    finalText='';
+  };
+
   recognition.onresult=e=>{
     let interim='';
     for(let i=e.resultIndex;i<e.results.length;i++){
       const t=e.results[i][0].transcript;
-      if(e.results[i].isFinal) finalText+=t; else interim+=t;
+      if(e.results[i].isFinal) finalText+=t;
+      else interim+=t;
     }
-    input.value=(finalText+interim).trim();resize();
+    input.value=(finalText+interim).trim();
+    resize();
   };
+
   recognition.onend=()=>{
     mic.classList.remove('listening');
-    statusEl.textContent=ready?'جاهز':'جاري تجهيز النموذج…';
-    if(input.value.trim())submit();
+    setStatus(ready?'جاهز':'جاري تجهيز النموذج…');
+    if(input.value.trim()) submit();
   };
-  recognition.onerror=e=>{mic.classList.remove('listening');statusEl.textContent='الميكروفون: '+e.error;};  mic.addEventListener('click',()=>{
+
+  recognition.onerror=e=>{
+    mic.classList.remove('listening');
+    setStatus('الميكروفون: '+e.error);
+  };
+
+  mic.addEventListener('click',()=>{
     if(busy)return;
     try{recognition.start();}catch{}
   });
@@ -104,4 +185,8 @@ if(SR){
 }
 
 setBusy(true);
-worker.postMessage({type:'load',hasWebGPU:!!navigator.gpu});
+loadModel().catch(e=>{
+  add('assistant','تعذر تشغيل النموذج: '+(e?.message||String(e)));
+  setStatus('خطأ');
+  setBusy(false);
+});

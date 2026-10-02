@@ -22,7 +22,7 @@ async function load(hasWebGPU){
       postMessage({type:'status',text:'جاري التشغيل على GPU…'});
       generator=await pipeline('text-generation',MODEL,{
         device:'webgpu',
-        dtype:'q4f16',
+        dtype:'q4',
         progress_callback:progress
       });
       device='webgpu';
@@ -53,9 +53,7 @@ self.onmessage=async({data})=>{
       const messages=(data.messages||[]).slice(-12);
       const out=await generator(messages,{
         max_new_tokens:192,
-        do_sample:true,
-        temperature:0.7,
-        top_p:0.9,
+        do_sample:false,
         repetition_penalty:1.05
       });
       const generated=out?.[0]?.generated_text;
