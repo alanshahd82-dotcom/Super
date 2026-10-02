@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0d10">
+<title>دردشة محلية</title>
+<style>
+*{box-sizing:border-box}html,body{height:100%;margin:0;font-family:system-ui,-apple-system,"Segoe UI",Tahoma,Arial,sans-serif;background:#0b0d10;color:#f4f6f8}
+body{display:flex;justify-content:center}.app{width:min(900px,100%);height:100dvh;display:grid;grid-template-rows:auto 1fr auto;background:#0b0d10}
+header{padding:14px 16px;border-bottom:1px solid #222831;display:flex;align-items:center;justify-content:space-between;gap:12px;background:#101318}
+.title{font-weight:700}.status{font-size:12px;color:#aab2bd;max-width:60%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#chat{padding:18px 14px;overflow:auto;display:flex;flex-direction:column;gap:12px}
+.msg{max-width:88%;padding:12px 14px;border-radius:18px;line-height:1.65;white-space:pre-wrap;word-break:break-word}
+.user{align-self:flex-start;background:#2357d9;color:white;border-bottom-right-radius:5px}
+.ai{align-self:flex-end;background:#171b21;border:1px solid #252b34;border-bottom-left-radius:5px}
+.composer{display:grid;grid-template-columns:auto 1fr auto;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid #222831;background:#101318}
+button,textarea{font:inherit}textarea{resize:none;min-height:46px;max-height:140px;padding:12px 14px;border-radius:16px;border:1px solid #303844;background:#0d1014;color:#fff;outline:none}
+button{border:0;border-radius:16px;min-width:48px;padding:0 14px;background:#202630;color:#fff;cursor:pointer}
+#send{background:#2d64e3;font-weight:700}button:disabled{opacity:.45}.hint{font-size:11px;color:#7f8995;padding:0 14px 8px;text-align:center;background:#101318}
+#mic.listening{background:#a61f2b}
+</style>
+</head><body>
+<div class="app">
+<header><div class="title">دردشة</div><div id="status" class="status">جاري تجهيز النموذج…</div></header>
+<main id="chat"></main>
+<div>
+<div class="composer">
+<button id="mic" title="تحدث">🎙️</button>
+<textarea id="input" rows="1" placeholder="اكتب أو تكلم…"></textarea>
+<button id="send">إرسال</button>
+</div>
+<div class="hint">أول تشغيل يحتاج تنزيل النموذج مرة واحدة.</div>
+</div>
+</div>
+<script type="module" src="./app.js"></script>
+</body>
+</html>
