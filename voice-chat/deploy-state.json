@@ -1,10 +1,10 @@
 {
-  "request_id": "delete-probe-create-20261003-v1",
-  "publish_id": "be8d4c5940a162483ff85314",
-  "requested_at": "2026-10-03T02:39:41.497Z",
-  "message": "create temporary deletion probe",
+  "request_id": "delete-probe-remove-20261003-v1",
+  "publish_id": "a4b48a4aed75d06498300077",
+  "requested_at": "2026-10-03T02:40:39.183Z",
+  "message": "remove temporary deletion probe",
   "files": [
     "voice-chat/delete-probe.txt"
   ],
-  "base": "5602cfa48cde9765cf9d8dae06019b26784f3ade"
+  "base": "55509851210fdee7514456f3810390e2e0318934"
 }
