@@ -55,6 +55,8 @@ GitHub Pages مفعّل والنشر يعمل من main.
 - voice-chat/bridge-endpoint.json
 - voice-chat/PROJECT_CONTEXT.md
 - voice-chat/PROJECT_MEMORY.json
+- voice-chat/tools/registry.json
+- voice-chat/tools/*.json (أدوات دائمة ينشئها الوكيل)
 - voice-chat/manifest.webmanifest
 - voice-chat/sw.js
 
@@ -95,6 +97,8 @@ agent.js يدعم حالياً:
 التغييرات المحلية يمكن حفظها في المتصفح.
 التغييرات الدائمة تمر عبر Agent Bridge إلى GitHub.
 
+الأدوات الدائمة لها سجل مركزي في voice-chat/tools/registry.json. يستطيع الوكيل إنشاء manifest مستقل لكل أداة تحت voice-chat/tools/ ثم تسجيلها في registry؛ التطبيق يحمّل الأدوات المفعلة تلقائياً في كل تشغيل داخل iframe sandbox معزول.
+
 ### Agent Bridge
 المجلد:
 - agent-bridge/
@@ -123,6 +127,7 @@ agent.js يدعم حالياً:
 16. بعد Push، ينتظر الجسر حتى يرى نفس معرّف النشر على GitHub Pages ليتأكد أن النسخة الحية وصلت فعلياً.
 17. إذا فشل Push بعد Commit، يعاد المستودع تلقائياً إلى HEAD السابق بدلاً من ترك حالة نصف منشورة.
 18. يدعم rollback عبر git revert لأحدث Commit أنشأه الوكيل فقط، ويُنشر كتغيير جديد قابل للتتبع.
+19. يتحقق من بنية tools/registry.json ومن وجود وصحة manifest لكل أداة مسجلة قبل قبول أي Commit.
 
 الجسر يستمع محلياً على:
 - http://127.0.0.1:8788

@@ -23,6 +23,7 @@ const MAX_BODY=900000;
 const DEFAULT_CONTEXT=[
   'voice-chat/PROJECT_CONTEXT.md',
   'voice-chat/PROJECT_MEMORY.json',
+  'voice-chat/tools/registry.json',
   'voice-chat/index.html',
   'voice-chat/app.js',
   'voice-chat/agent.js',
@@ -340,6 +341,7 @@ async function validateProject(touched){
     'agent.js',
     'bridge.js',
     'PROJECT_MEMORY.json',
+    'tools/registry.json',
     'manifest.webmanifest',
     'sw.js',
     'PROJECT_CONTEXT.md'
@@ -363,6 +365,32 @@ async function validateProject(touched){
     if(!src) throw new Error('manifest_icon_invalid');
     const stat=await fsp.stat(path.join(root,src)).catch(()=>null);
     if(!stat?.isFile()) throw new Error('manifest_icon_missing: '+src);
+  }
+
+  const registryPath=path.join(root,'tools','registry.json');
+  const registry=JSON.parse(await fsp.readFile(registryPath,'utf8'));
+  if(registry.version!==1||!Array.isArray(registry.tools)) throw new Error('tool_registry_invalid');
+  const toolIds=new Set();
+  for(const entry of registry.tools){
+    if(!entry||typeof entry!=='object') throw new Error('tool_registry_entry_invalid');
+    const id=String(entry.id||'');
+    if(!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error('tool_id_invalid: '+id);
+    if(toolIds.has(id)) throw new Error('tool_id_duplicate: '+id);
+    toolIds.add(id);
+    if(entry.enabled!==undefined&&typeof entry.enabled!=='boolean') throw new Error('tool_enabled_invalid: '+id);
+
+    const src=String(entry.src||'').replace(/^\.\//,'').replace(/\\/g,'/');
+    if(!/^tools\/[A-Za-z0-9._-]+\.json$/.test(src)||src.includes('..')) throw new Error('tool_src_invalid: '+id);
+    const toolFull=path.join(root,...src.split('/'));
+    const stat=await fsp.stat(toolFull).catch(()=>null);
+    if(!stat?.isFile()) throw new Error('tool_manifest_missing: '+id);
+
+    const tool=JSON.parse(await fsp.readFile(toolFull,'utf8'));
+    if(tool.id!==id||typeof tool.name!=='string'||!tool.name.trim()||typeof tool.html!=='string'){
+      throw new Error('tool_manifest_invalid: '+id);
+    }
+    if(tool.css!==undefined&&typeof tool.css!=='string') throw new Error('tool_css_invalid: '+id);
+    if(tool.js!==undefined&&typeof tool.js!=='string') throw new Error('tool_js_invalid: '+id);
   }
 
   for(const rel of touched){

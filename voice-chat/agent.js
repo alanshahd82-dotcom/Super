@@ -48,6 +48,15 @@ function saveState(state){
 <agent_action>{"type":"repo_patch","message":"وصف قصير","edits":[{"path":"voice-chat/app.js","old":"النص المطابق حرفيًا","new":"النص البديل"}]}</agent_action>
 ولإنشاء ملف جديد أو عندما يكون الاستبدال غير مناسب:
 <agent_action>{"type":"repo_write","message":"وصف قصير","files":[{"path":"voice-chat/new-file.js","content":"المحتوى الكامل"}]}</agent_action>
+
+للأدوات أو التكاملات الدائمة التي يجب أن تظهر بعد كل إعادة فتح:
+1) اقرأ voice-chat/tools/registry.json.
+2) أنشئ ملفاً مثل voice-chat/tools/camera.json بهذا الشكل:
+{"id":"camera","name":"الكاميرا","html":"HTML","css":"CSS اختياري","js":"JavaScript اختياري"}
+3) حدّث voice-chat/tools/registry.json وأضف:
+{"id":"camera","src":"./tools/camera.json","enabled":true}
+هذه الأدوات تُحمّل تلقائياً بعد النشر داخل iframe معزول. عند حذف أداة دائمة حدّث registry أولاً.
+
 إذا طلب المستخدم صراحة التراجع عن آخر تغيير نفذه الوكيل:
 <agent_action>{"type":"repo_rollback"}</agent_action>
 لا تستخدم repo_rollback من تلقاء نفسك ولا بسبب تخمين؛ يجب أن يكون طلب التراجع صريحاً من المستخدم.

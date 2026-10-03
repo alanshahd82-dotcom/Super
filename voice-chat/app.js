@@ -1,5 +1,5 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, looksLikeDevelopmentRequest, looksLikeRollbackRequest, buildRecoveryInstruction } from './agent.js?v=20261002-8';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, renderExtension, looksLikeDevelopmentRequest, looksLikeRollbackRequest, buildRecoveryInstruction } from './agent.js?v=20261002-9';
 import { bridgeHealth, pairBridge, bridgeGenerate, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, bridgeRollback, hasBridgeToken } from './bridge.js?v=20261002-4';
 
 const chat=document.querySelector('#chat');
@@ -136,6 +136,29 @@ function saveHistory(){
 
 for(const msg of history) add(msg.role,msg.content);
 restoreAgentUI(agentState,{chat,input,titleEl});
+
+async function loadPermanentTools(){
+  try{
+    const registryResponse=await fetch('./tools/registry.json?ts='+Date.now(),{cache:'no-store'});
+    if(!registryResponse.ok) return;
+    const registry=await registryResponse.json();
+    const entries=Array.isArray(registry.tools)?registry.tools:[];
+    for(const entry of entries.slice(0,40)){
+      if(entry?.enabled===false||typeof entry?.src!=='string') continue;
+      const src=entry.src.startsWith('./')?entry.src:'./'+entry.src.replace(/^\/+/, '');
+      if(!src.startsWith('./tools/')) continue;
+      try{
+        const response=await fetch(src+'?ts='+Date.now(),{cache:'no-store'});
+        if(!response.ok) continue;
+        const tool=await response.json();
+        if(!tool||typeof tool.id!=='string'||typeof tool.name!=='string'||typeof tool.html!=='string') continue;
+        renderExtension(tool,chat);
+      }catch{}
+    }
+  }catch{}
+}
+
+loadPermanentTools();
 
 let bridgeOnline=false;
 
@@ -378,6 +401,7 @@ async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,vi
       const ctx=await bridgeContext([
         'voice-chat/PROJECT_CONTEXT.md',
         'voice-chat/PROJECT_MEMORY.json',
+        'voice-chat/tools/registry.json',
         ...collectRepoTargets(currentPatches,currentWrites)
       ]);
       currentHead=ctx.head;
@@ -420,7 +444,7 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
       ].filter(Boolean);
       readActions=[{
         type:'repo_context',
-        paths:['voice-chat/PROJECT_CONTEXT.md','voice-chat/PROJECT_MEMORY.json',...targets]
+        paths:['voice-chat/PROJECT_CONTEXT.md','voice-chat/PROJECT_MEMORY.json','voice-chat/tools/registry.json',...targets]
       }];
     }
 
@@ -437,7 +461,7 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
     const toolResults=[];
     for(const action of readActions){
       if(action.type==='repo_context'){
-        const paths=[...new Set(['voice-chat/PROJECT_CONTEXT.md','voice-chat/PROJECT_MEMORY.json',...(Array.isArray(action.paths)?action.paths:[])])].slice(0,10);
+        const paths=[...new Set(['voice-chat/PROJECT_CONTEXT.md','voice-chat/PROJECT_MEMORY.json','voice-chat/tools/registry.json',...(Array.isArray(action.paths)?action.paths:[])])].slice(0,10);
         setStatus('يقرأ ملفات المشروع…');
         const ctx=await bridgeContext(paths);
         lastRepoHead=ctx.head||lastRepoHead;
