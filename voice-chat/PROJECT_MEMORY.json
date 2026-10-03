@@ -43,9 +43,19 @@
         "voice-chat/PROJECT_CONTEXT.md"
       ],
       "base": "851e98999c6e1e3349419ee0aa3ca3a1c5c0adfc"
+    },
+    {
+      "at": "2026-10-03T02:39:40.897Z",
+      "request_id": "delete-probe-create-20261003-v1",
+      "publish_id": "be8d4c5940a162483ff85314",
+      "message": "create temporary deletion probe",
+      "files": [
+        "voice-chat/delete-probe.txt"
+      ],
+      "base": "5602cfa48cde9765cf9d8dae06019b26784f3ade"
     }
   ],
-  "updated_at": "2026-10-02T19:31:02.436Z",
+  "updated_at": "2026-10-03T02:39:40.897Z",
   "goal": "PWA chat that can understand user development requests, inspect its own repository, modify itself, test, publish to GitHub Pages, and keep project context without requiring the user to edit code.",
   "constraints": [
     "0 MAD basic operating cost",
@@ -54,13 +64,13 @@
     "preserve PROJECT_CONTEXT.md as the canonical handoff"
   ],
   "last_change": {
-    "at": "2026-10-02T19:31:02.436Z",
-    "request_id": "document-idempotency-proof-20261002-v1",
-    "publish_id": "45c1f5217a2892b5b2c1c634",
-    "message": "document resumable idempotent task verification",
+    "at": "2026-10-03T02:39:40.897Z",
+    "request_id": "delete-probe-create-20261003-v1",
+    "publish_id": "be8d4c5940a162483ff85314",
+    "message": "create temporary deletion probe",
     "files": [
-      "voice-chat/PROJECT_CONTEXT.md"
+      "voice-chat/delete-probe.txt"
     ],
-    "base": "851e98999c6e1e3349419ee0aa3ca3a1c5c0adfc"
+    "base": "5602cfa48cde9765cf9d8dae06019b26784f3ade"
   }
 }
