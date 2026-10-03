@@ -1,0 +1,7 @@
+{
+  "id": "calculator",
+  "name": "آلة حاسبة",
+  "html": "<main class=\"calc\"><div class=\"row\"><input id=\"a\" type=\"number\" inputmode=\"decimal\" placeholder=\"العدد الأول\"><select id=\"op\" aria-label=\"العملية\"><option>+</option><option>-</option><option>×</option><option>÷</option></select><input id=\"b\" type=\"number\" inputmode=\"decimal\" placeholder=\"العدد الثاني\"></div><button id=\"go\">احسب</button><output id=\"out\">النتيجة ستظهر هنا</output></main>",
+  "css": ".calc{padding:18px;display:grid;gap:14px}.row{display:grid;grid-template-columns:1fr 70px 1fr;gap:8px}.calc input,.calc select,.calc button{min-height:44px;border:1px solid #303844;border-radius:12px;background:#0d1014;color:#fff;padding:8px;font:inherit}.calc button{background:#2463eb;border-color:#2463eb;font-weight:700}.calc output{padding:12px;border-radius:12px;background:#0d1014;text-align:center;font-weight:700}@media(max-width:520px){.row{grid-template-columns:1fr}.calc select{width:100%}}",
+  "js": "const a=document.querySelector('#a'),b=document.querySelector('#b'),op=document.querySelector('#op'),out=document.querySelector('#out');document.querySelector('#go').addEventListener('click',()=>{const x=Number(a.value),y=Number(b.value);if(!Number.isFinite(x)||!Number.isFinite(y)){out.textContent='أدخل رقمين صالحين';return}let r;switch(op.value){case '+':r=x+y;break;case '-':r=x-y;break;case '×':r=x*y;break;case '÷':r=y===0?'لا يمكن القسمة على صفر':x/y;break}out.textContent='النتيجة: '+r;});"
+}

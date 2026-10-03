@@ -1,10 +1,11 @@
 {
-  "request_id": "delete-probe-remove-20261003-v1",
-  "publish_id": "a4b48a4aed75d06498300077",
-  "requested_at": "2026-10-03T02:40:39.183Z",
-  "message": "remove temporary deletion probe",
+  "request_id": "bootstrap-calculator-20261003-v1",
+  "publish_id": "8f06a772f3512afc328db2b0",
+  "requested_at": "2026-10-03T02:52:39.900Z",
+  "message": "install persistent calculator tool",
   "files": [
-    "voice-chat/delete-probe.txt"
+    "voice-chat/tools/calculator.json",
+    "voice-chat/tools/registry.json"
   ],
-  "base": "55509851210fdee7514456f3810390e2e0318934"
+  "base": "52ffbc293584885fcb0d83d96df272832a136347"
 }
