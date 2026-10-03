@@ -162,16 +162,29 @@ loadPermanentTools();
 
 let bridgeOnline=false;
 
-function setBridgeBadge(online,paired){
+function setBridgeBadge(online,paired,state=null){
   bridgeOnline=online;
   bridgeStatusEl.classList.toggle('online',online&&paired);
   bridgeStatusEl.classList.toggle('offline',!(online&&paired));
-  bridgeStatusEl.textContent=online?(paired?'GitHub ✓':'ربط GitHub'):'GitHub ×';
+  if(!online){
+    bridgeStatusEl.textContent='GitHub ×';
+    return;
+  }
+  if(!paired){
+    bridgeStatusEl.textContent='ربط GitHub';
+    return;
+  }
+  const dev=state?.pc_model_progress?.dev;
+  if(dev&&!dev.ready&&Number.isFinite(dev.percent)){
+    bridgeStatusEl.textContent='GitHub ✓ · Coder '+dev.percent+'%';
+    return;
+  }
+  bridgeStatusEl.textContent='GitHub ✓ · Coder جاهز';
 }
 
 async function refreshBridge(){
   const state=await bridgeHealth();
-  setBridgeBadge(state.online,hasBridgeToken());
+  setBridgeBadge(state.online,hasBridgeToken(),state);
   return state;
 }
 

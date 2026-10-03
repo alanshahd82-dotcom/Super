@@ -756,13 +756,19 @@ const server=http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://localhost');
   try{
     if(req.method==='GET'&&url.pathname==='/health'){
+      const chatModel=await modelCacheState(CHAT_MODEL);
+      const devModel=await modelCacheState(DEV_MODEL);
       json(res,200,{
         ok:true,
         service:'super-agent-bridge',
         pairing:true,
         pc_inference:{
-          chat:await modelCacheReady(CHAT_MODEL),
-          dev:await modelCacheReady(DEV_MODEL)
+          chat:chatModel.ready,
+          dev:devModel.ready
+        },
+        pc_model_progress:{
+          chat:chatModel,
+          dev:devModel
         }
       },origin);
       return;
