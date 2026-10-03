@@ -99,6 +99,14 @@ export async function bridgeApply(payload){
   });
 }
 
+export async function bridgeInstallTool(payload){
+  return request('/api/tool/install',{
+    method:'POST',
+    auth:true,
+    body:payload||{}
+  });
+}
+
 export async function bridgeRollback(expectedHead){
   return request('/api/rollback',{
     method:'POST',

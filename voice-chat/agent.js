@@ -52,13 +52,10 @@ function saveState(state){
 <agent_action>{"type":"repo_delete","message":"وصف قصير","paths":["voice-chat/tools/old-tool.json"]}</agent_action>
 لا تستخدم repo_delete إلا عندما يتضمن طلب المستخدم حذفاً أو إزالة صريحة.
 
-للأدوات أو التكاملات الدائمة التي يجب أن تظهر بعد كل إعادة فتح:
-1) اقرأ voice-chat/tools/registry.json.
-2) أنشئ ملفاً مثل voice-chat/tools/camera.json بهذا الشكل:
-{"id":"camera","name":"الكاميرا","html":"HTML","css":"CSS اختياري","js":"JavaScript اختياري"}
-3) حدّث voice-chat/tools/registry.json وأضف:
-{"id":"camera","src":"./tools/camera.json","enabled":true}
-هذه الأدوات تُحمّل تلقائياً بعد النشر داخل iframe معزول. عند حذف أداة دائمة حدّث registry أولاً.
+للأدوات أو التكاملات الدائمة استخدم الأداة المباشرة التالية بدلاً من تعديل registry يدوياً كلما أمكن:
+<agent_action>{"type":"tool_install","message":"وصف قصير","tool":{"id":"camera","name":"الكاميرا","html":"HTML","css":"CSS اختياري","js":"JavaScript اختياري","enabled":true}}</agent_action>
+tool_install ينشئ manifest الأداة ويحدث voice-chat/tools/registry.json ويختبر وينشر في خطوة واحدة. الأدوات المفعلة تُحمّل تلقائياً بعد النشر داخل iframe معزول.
+إذا احتجت شكلاً غير مدعوم من tool_install يمكنك الرجوع إلى repo_patch/repo_write.
 
 إذا طلب المستخدم صراحة التراجع عن آخر تغيير نفذه الوكيل:
 <agent_action>{"type":"repo_rollback"}</agent_action>
@@ -75,7 +72,7 @@ function saveState(state){
 
 const ACTION_TYPES=new Set([
   'ui_patch','extension','remove_extension','remember',
-  'repo_tree','repo_search','repo_context','repo_patch','repo_write','repo_delete','repo_rollback'
+  'repo_tree','repo_search','repo_context','repo_patch','repo_write','repo_delete','tool_install','repo_rollback'
 ]);
 
 export function parseAgentOutput(text){

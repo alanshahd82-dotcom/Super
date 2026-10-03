@@ -601,6 +601,49 @@ async function applyFiles(body){
   }
 }
 
+async function installPermanentTool(body){
+  const tool=body?.tool&&typeof body.tool==='object'?body.tool:null;
+  if(!tool) throw new Error('tool_required');
+
+  const id=String(tool.id||'').trim();
+  if(!/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error('tool_id_invalid');
+  const name=String(tool.name||'').trim().slice(0,80);
+  const html=String(tool.html??'');
+  const css=String(tool.css??'');
+  const js=String(tool.js??'');
+  if(!name||!html) throw new Error('tool_manifest_invalid');
+  if(html.length>120000||css.length>100000||js.length>120000) throw new Error('tool_too_large');
+
+  const registryRel='voice-chat/tools/registry.json';
+  const registryFull=path.join(REPO,...registryRel.split('/'));
+  const registry=JSON.parse(await fsp.readFile(registryFull,'utf8'));
+  if(registry.version!==1||!Array.isArray(registry.tools)) throw new Error('tool_registry_invalid');
+
+  const manifestRel='voice-chat/tools/'+id+'.json';
+  const entry={id,src:'./tools/'+id+'.json',enabled:tool.enabled!==false};
+  const nextTools=registry.tools.filter(x=>x&&x.id!==id);
+  nextTools.push(entry);
+  nextTools.sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+
+  const manifest={
+    id,
+    name,
+    html,
+    css,
+    js
+  };
+
+  return applyFiles({
+    expected_head:body.expected_head,
+    request_id:body.request_id,
+    message:String(body.message||('install tool '+id)).slice(0,100),
+    files:[
+      {path:manifestRel,content:JSON.stringify(manifest,null,2)+'\n'},
+      {path:registryRel,content:JSON.stringify({version:1,tools:nextTools},null,2)+'\n'}
+    ]
+  });
+}
+
 async function rollbackLatestAgentChange(body){
   const {stdout:currentHead}=await git(['rev-parse','HEAD']);
   const expectedHead=String(body.expected_head||'').trim();
@@ -769,6 +812,12 @@ const server=http.createServer(async(req,res)=>{
     if(req.method==='POST'&&url.pathname==='/api/apply'){
       const body=await readJson(req);
       json(res,200,await applyFiles(body),origin);
+      return;
+    }
+
+    if(req.method==='POST'&&url.pathname==='/api/tool/install'){
+      const body=await readJson(req);
+      json(res,200,await installPermanentTool(body),origin);
       return;
     }
 

@@ -1,6 +1,6 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
 import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, renderExtension, looksLikeDevelopmentRequest, looksLikeDeleteRequest, looksLikeRollbackRequest, buildRecoveryInstruction } from './agent.js?v=20261002-10';
-import { bridgeHealth, pairBridge, bridgeGenerate, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, bridgeRollback, hasBridgeToken } from './bridge.js?v=20261002-4';
+import { bridgeHealth, pairBridge, bridgeGenerate, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, bridgeInstallTool, bridgeRollback, hasBridgeToken } from './bridge.js?v=20261002-5';
 
 const chat=document.querySelector('#chat');
 const input=document.querySelector('#input');
@@ -333,7 +333,7 @@ function isRepoReadAction(action){
 }
 
 function isRepoWriteAction(action){
-  return ['repo_patch','repo_write','repo_delete','repo_rollback'].includes(action?.type);
+  return ['repo_patch','repo_write','repo_delete','tool_install','repo_rollback'].includes(action?.type);
 }
 
 function isRepoAction(action){
@@ -493,7 +493,7 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
       {role:'assistant',content:visible||'أحتاج معلومات من المشروع قبل التنفيذ.'},
       {
         role:'system',
-        content:'نتائج أدوات المشروع أدناه. واصل تنفيذ طلب المستخدم. إذا أصبحت المعلومات كافية، أخرج repo_patch أو repo_write. استخدم repo_delete فقط إذا طلب المستخدم حذفاً أو إزالة صريحة، وrepo_rollback فقط إذا طلب التراجع صراحة. إذا ما زلت تحتاج معلومات، استخدم repo_tree أو repo_search أو repo_context فقط للخطوة التالية.\n\n'+toolResults.join('\n\n')
+        content:'نتائج أدوات المشروع أدناه. واصل تنفيذ طلب المستخدم. إذا كان المطلوب أداة دائمة ففضّل tool_install. للتعديلات الأخرى استخدم repo_patch أو repo_write. استخدم repo_delete فقط إذا طلب المستخدم حذفاً أو إزالة صريحة، وrepo_rollback فقط إذا طلب التراجع صراحة. إذا ما زلت تحتاج معلومات، استخدم repo_tree أو repo_search أو repo_context فقط للخطوة التالية.\n\n'+toolResults.join('\n\n')
       }
     ];
 
@@ -508,7 +508,7 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
     setStatus('يحوّل الخطة إلى تنفيذ…');
     const forced=await generateText([
       ...workingMessages,
-      {role:'system',content:'انتهت مرحلة القراءة. لا تطلب قراءة أخرى. نفّذ طلب المستخدم الآن بإخراج repo_patch أو repo_write صالح. استخدم repo_delete فقط إذا كان المستخدم طلب حذفاً صريحاً، وrepo_rollback فقط إذا طلب التراجع صراحة. إذا يوجد مانع تقني حقيقي، اذكره باختصار.'}
+      {role:'system',content:'انتهت مرحلة القراءة. لا تطلب قراءة أخرى. نفّذ طلب المستخدم الآن. إذا كان المطلوب أداة دائمة ففضّل tool_install، وإلا استخدم repo_patch أو repo_write. استخدم repo_delete فقط إذا كان المستخدم طلب حذفاً صريحاً، وrepo_rollback فقط إذا طلب التراجع صراحة. إذا يوجد مانع تقني حقيقي، اذكره باختصار.'}
     ],900,'dev');
     const forcedParsed=parseAgentOutput(forced);
     if(forcedParsed.actions.length) actions=[...forcedParsed.actions];
@@ -532,8 +532,9 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
   const repoPatches=actions.filter(a=>a?.type==='repo_patch');
   const repoWrites=actions.filter(a=>a?.type==='repo_write');
   const repoDeletes=actions.filter(a=>a?.type==='repo_delete');
+  const repoToolInstalls=actions.filter(a=>a?.type==='tool_install');
   const repoRollbacks=actions.filter(a=>a?.type==='repo_rollback');
-  if(repoPatches.length||repoWrites.length||repoDeletes.length||repoRollbacks.length){
+  if(repoPatches.length||repoWrites.length||repoDeletes.length||repoToolInstalls.length||repoRollbacks.length){
     const state=await refreshBridge();
     if(!state.online||!hasBridgeToken()){
       if(state.online) showPairModal();
@@ -552,6 +553,27 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
           executed=true;
           executionMeta={commit:result.commit,rolled_back:result.rolled_back||null};
           notes.push('تم التراجع عن التغيير '+String(result.rolled_back||'').slice(0,7)+' في Commit جديد: '+result.commit.slice(0,7));
+        }
+      }else if(repoToolInstalls.length){
+        const action=repoToolInstalls[0];
+        setStatus('يثبّت الأداة وينشرها…');
+        result=await bridgeInstallTool({
+          tool:action.tool||{},
+          message:action.message||'install permanent tool',
+          expected_head:lastRepoHead,
+          request_id:taskId||null
+        });
+        if(result.no_changes){
+          executed=true;
+          notes.push('الأداة موجودة بالفعل ولا تحتاج تغييرًا.');
+        }else if(result.duplicate){
+          executed=true;
+          executionMeta={commit:result.commit||null,duplicate:true,request_id:result.request_id||taskId||null};
+          notes.push('هذه المهمة سبق تنفيذها؛ تم منع تكرار تثبيت الأداة.');
+        }else if(result.commit){
+          executed=true;
+          executionMeta={commit:result.commit,request_id:result.request_id||taskId||null,tool_id:action.tool?.id||null};
+          notes.push('تم تثبيت الأداة الدائمة ونشرها: '+String(action.tool?.name||action.tool?.id||'أداة جديدة'));
         }
       }else{
         const applied=await applyRepoChangesWithRepair(
