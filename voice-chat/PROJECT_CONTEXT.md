@@ -63,7 +63,8 @@ GitHub Pages مفعّل والنشر يعمل من main.
 ### النموذج
 النماذج المحلية الحالية:
 - للدردشة العامة: onnx-community/Qwen2.5-0.5B-Instruct
-- لأوامر تطوير المشروع: onnx-community/Qwen2.5-Coder-0.5B-Instruct
+- لأوامر تطوير المشروع داخل المتصفح كمسار احتياطي: onnx-community/Qwen2.5-Coder-0.5B-Instruct
+- لأوامر التطوير على Agent Bridge/الحاسوب: onnx-community/Qwen2.5-Coder-1.5B-Instruct (أقوى، مجاني ومحلي)
 
 التشغيل:
 - داخل المتصفح عبر Transformers.js.

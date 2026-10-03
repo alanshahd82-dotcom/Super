@@ -32,7 +32,7 @@ const DEFAULT_CONTEXT=[
 ];
 
 const CHAT_MODEL='onnx-community/Qwen2.5-0.5B-Instruct';
-const DEV_MODEL='onnx-community/Qwen2.5-Coder-0.5B-Instruct';
+const DEV_MODEL='onnx-community/Qwen2.5-Coder-1.5B-Instruct';
 let modelPipeline=null;
 let modelPipelineId=null;
 let modelModulePromise=null;
