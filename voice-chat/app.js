@@ -1,5 +1,5 @@
 import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/transformers.min.js';
-import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, renderExtension, looksLikeDevelopmentRequest, looksLikeRollbackRequest, buildRecoveryInstruction } from './agent.js?v=20261002-9';
+import { loadAgentState, buildAgentSystem, parseAgentOutput, applyAgentActions, restoreAgentUI, renderExtension, looksLikeDevelopmentRequest, looksLikeDeleteRequest, looksLikeRollbackRequest, buildRecoveryInstruction } from './agent.js?v=20261002-10';
 import { bridgeHealth, pairBridge, bridgeGenerate, bridgeContext, bridgeTree, bridgeSearch, bridgeApply, bridgeRollback, hasBridgeToken } from './bridge.js?v=20261002-4';
 
 const chat=document.querySelector('#chat');
@@ -333,7 +333,7 @@ function isRepoReadAction(action){
 }
 
 function isRepoWriteAction(action){
-  return ['repo_patch','repo_write','repo_rollback'].includes(action?.type);
+  return ['repo_patch','repo_write','repo_delete','repo_rollback'].includes(action?.type);
 }
 
 function isRepoAction(action){
@@ -366,29 +366,33 @@ async function recoverInitialPlan(userText,modelMessages,answer){
   return parsed;
 }
 
-function collectRepoTargets(patches,writes){
+function collectRepoTargets(patches,writes,deletes=[]){
   return [...new Set([
     ...patches.flatMap(a=>Array.isArray(a?.edits)?a.edits.map(x=>x?.path):[]),
-    ...writes.flatMap(a=>Array.isArray(a?.files)?a.files.map(x=>x?.path):[])
+    ...writes.flatMap(a=>Array.isArray(a?.files)?a.files.map(x=>x?.path):[]),
+    ...deletes.flatMap(a=>Array.isArray(a?.paths)?a.paths:[])
   ].filter(Boolean))].slice(0,9);
 }
 
-async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,visible,requestId){
+async function applyRepoChangesWithRepair(patches,writes,deletes,head,workingMessages,visible,requestId){
   let currentPatches=[...patches];
   let currentWrites=[...writes];
+  let currentDeletes=[...deletes];
   let currentHead=head;
   let currentVisible=visible;
 
   for(let attempt=0;attempt<2;attempt++){
     const edits=currentPatches.flatMap(a=>Array.isArray(a.edits)?a.edits:[]).slice(0,16);
     const files=currentWrites.flatMap(a=>Array.isArray(a.files)?a.files:[]).slice(0,12);
-    const message=[...currentPatches,...currentWrites].map(a=>a.message).find(Boolean)||'self update';
+    const deletePaths=currentDeletes.flatMap(a=>Array.isArray(a.paths)?a.paths:[]).slice(0,12);
+    const message=[...currentPatches,...currentWrites,...currentDeletes].map(a=>a.message).find(Boolean)||'self update';
     try{
       setStatus(attempt?'يعيد الاختبار والنشر…':'يختبر وينشر…');
       const result=await bridgeApply({
         message,
         edits,
         files,
+        deletes:deletePaths,
         expected_head:currentHead,
         request_id:requestId||null
       });
@@ -402,20 +406,21 @@ async function applyRepoChangesWithRepair(patches,writes,head,workingMessages,vi
         'voice-chat/PROJECT_CONTEXT.md',
         'voice-chat/PROJECT_MEMORY.json',
         'voice-chat/tools/registry.json',
-        ...collectRepoTargets(currentPatches,currentWrites)
+        ...collectRepoTargets(currentPatches,currentWrites,currentDeletes)
       ]);
       currentHead=ctx.head;
       const repairAnswer=await generateText([
         ...workingMessages,
         {
           role:'system',
-          content:'فشل تطبيق التعديل السابق بسبب: '+reason+'\nهذه هي الملفات الحالية. صحح التعديل وأخرج repo_patch أو repo_write فقط، دون تكرار الخطأ.\n\n'+formatContextResult(ctx)
+          content:'فشل تطبيق التعديل السابق بسبب: '+reason+'\nهذه هي الملفات الحالية. صحح التعديل وأخرج repo_patch أو repo_write، أو repo_delete فقط إذا كان طلب المستخدم الأصلي يتضمن حذفاً صريحاً. لا تكرر الخطأ.\n\n'+formatContextResult(ctx)
         }
       ],920,'dev');
       const repaired=parseAgentOutput(repairAnswer);
       currentPatches=repaired.actions.filter(a=>a?.type==='repo_patch');
       currentWrites=repaired.actions.filter(a=>a?.type==='repo_write');
-      if(!currentPatches.length&&!currentWrites.length) throw new Error('auto_repair_failed: '+reason);
+      currentDeletes=repaired.actions.filter(a=>a?.type==='repo_delete');
+      if(!currentPatches.length&&!currentWrites.length&&!currentDeletes.length) throw new Error('auto_repair_failed: '+reason);
       if(repaired.clean) currentVisible=repaired.clean;
     }
   }
@@ -429,7 +434,8 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
   let executed=false;
   let executionMeta={};
   const rollbackIntent=looksLikeRollbackRequest(userText);
-  const devIntent=looksLikeDevelopmentRequest(userText)||rollbackIntent;
+  const deleteIntent=looksLikeDeleteRequest(userText);
+  const devIntent=looksLikeDevelopmentRequest(userText)||rollbackIntent||deleteIntent;
   let lastRepoHead=null;
   let workingMessages=[...modelMessages];
 
@@ -440,7 +446,8 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
     if(!readActions.length&&writeActions.length&&!lastRepoHead){
       const targets=[
         ...writeActions.flatMap(a=>Array.isArray(a.edits)?a.edits.map(x=>x.path):[]),
-        ...writeActions.flatMap(a=>Array.isArray(a.files)?a.files.map(x=>x.path):[])
+        ...writeActions.flatMap(a=>Array.isArray(a.files)?a.files.map(x=>x.path):[]),
+        ...writeActions.flatMap(a=>Array.isArray(a.paths)?a.paths:[])
       ].filter(Boolean);
       readActions=[{
         type:'repo_context',
@@ -486,7 +493,7 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
       {role:'assistant',content:visible||'أحتاج معلومات من المشروع قبل التنفيذ.'},
       {
         role:'system',
-        content:'نتائج أدوات المشروع أدناه. واصل تنفيذ طلب المستخدم. إذا أصبحت المعلومات كافية، أخرج repo_patch أو repo_write، أو repo_rollback فقط إذا طلب المستخدم التراجع صراحة. إذا ما زلت تحتاج معلومات، استخدم repo_tree أو repo_search أو repo_context فقط للخطوة التالية.\n\n'+toolResults.join('\n\n')
+        content:'نتائج أدوات المشروع أدناه. واصل تنفيذ طلب المستخدم. إذا أصبحت المعلومات كافية، أخرج repo_patch أو repo_write. استخدم repo_delete فقط إذا طلب المستخدم حذفاً أو إزالة صريحة، وrepo_rollback فقط إذا طلب التراجع صراحة. إذا ما زلت تحتاج معلومات، استخدم repo_tree أو repo_search أو repo_context فقط للخطوة التالية.\n\n'+toolResults.join('\n\n')
       }
     ];
 
@@ -501,7 +508,7 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
     setStatus('يحوّل الخطة إلى تنفيذ…');
     const forced=await generateText([
       ...workingMessages,
-      {role:'system',content:'انتهت مرحلة القراءة. لا تطلب قراءة أخرى. نفّذ طلب المستخدم الآن بإخراج repo_patch أو repo_write صالح، أو repo_rollback فقط إذا كان المستخدم قد طلب التراجع صراحة. إذا يوجد مانع تقني حقيقي، اذكره باختصار.'}
+      {role:'system',content:'انتهت مرحلة القراءة. لا تطلب قراءة أخرى. نفّذ طلب المستخدم الآن بإخراج repo_patch أو repo_write صالح. استخدم repo_delete فقط إذا كان المستخدم طلب حذفاً صريحاً، وrepo_rollback فقط إذا طلب التراجع صراحة. إذا يوجد مانع تقني حقيقي، اذكره باختصار.'}
     ],900,'dev');
     const forcedParsed=parseAgentOutput(forced);
     if(forcedParsed.actions.length) actions=[...forcedParsed.actions];
@@ -512,6 +519,10 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
     actions=actions.filter(a=>a?.type!=='repo_rollback');
     notes.push('تم تجاهل أمر تراجع لم يطلبه المستخدم صراحة.');
   }
+  if(!deleteIntent&&actions.some(a=>a?.type==='repo_delete')){
+    actions=actions.filter(a=>a?.type!=='repo_delete');
+    notes.push('تم تجاهل أمر حذف لم يطلبه المستخدم صراحة.');
+  }
 
   const localActions=actions.filter(a=>!isRepoAction(a));
   const localApplied=applyAgentActions(agentState,localActions,{chat,input,titleEl});
@@ -520,8 +531,9 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
 
   const repoPatches=actions.filter(a=>a?.type==='repo_patch');
   const repoWrites=actions.filter(a=>a?.type==='repo_write');
+  const repoDeletes=actions.filter(a=>a?.type==='repo_delete');
   const repoRollbacks=actions.filter(a=>a?.type==='repo_rollback');
-  if(repoPatches.length||repoWrites.length||repoRollbacks.length){
+  if(repoPatches.length||repoWrites.length||repoDeletes.length||repoRollbacks.length){
     const state=await refreshBridge();
     if(!state.online||!hasBridgeToken()){
       if(state.online) showPairModal();
@@ -545,6 +557,7 @@ async function executeAgentPlan(parsed,modelMessages,userText,taskId=null){
         const applied=await applyRepoChangesWithRepair(
           repoPatches,
           repoWrites,
+          repoDeletes,
           lastRepoHead,
           workingMessages,
           visible,

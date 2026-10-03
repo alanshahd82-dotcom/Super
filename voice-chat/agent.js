@@ -48,6 +48,9 @@ function saveState(state){
 <agent_action>{"type":"repo_patch","message":"وصف قصير","edits":[{"path":"voice-chat/app.js","old":"النص المطابق حرفيًا","new":"النص البديل"}]}</agent_action>
 ولإنشاء ملف جديد أو عندما يكون الاستبدال غير مناسب:
 <agent_action>{"type":"repo_write","message":"وصف قصير","files":[{"path":"voice-chat/new-file.js","content":"المحتوى الكامل"}]}</agent_action>
+إذا طلب المستخدم صراحة حذف ملف/أداة من المشروع:
+<agent_action>{"type":"repo_delete","message":"وصف قصير","paths":["voice-chat/tools/old-tool.json"]}</agent_action>
+لا تستخدم repo_delete إلا عندما يتضمن طلب المستخدم حذفاً أو إزالة صريحة.
 
 للأدوات أو التكاملات الدائمة التي يجب أن تظهر بعد كل إعادة فتح:
 1) اقرأ voice-chat/tools/registry.json.
@@ -72,7 +75,7 @@ function saveState(state){
 
 const ACTION_TYPES=new Set([
   'ui_patch','extension','remove_extension','remember',
-  'repo_tree','repo_search','repo_context','repo_patch','repo_write','repo_rollback'
+  'repo_tree','repo_search','repo_context','repo_patch','repo_write','repo_delete','repo_rollback'
 ]);
 
 export function parseAgentOutput(text){
@@ -94,6 +97,10 @@ export function looksLikeDevelopmentRequest(text){
   const verbs=/(أضف|اضف|ضيف|حسّن|حسن|طوّر|طور|عدّل|عدل|غيّر|غير|اربط|أنشئ|انشئ|ابن[ِى]?|حوّل|حول|ثبّت|ثبت|احذف|أزل|ازل|أصلح|اصلح|صمّم|صمم|ادمج|ادمج|انشر|حدّث|حدث|add|improve|change|modify|edit|build|create|connect|integrate|deploy|fix|remove|delete|redesign)/i;
   const targets=/(التطبيق|الدردشة|الشات|الواجهة|المشروع|الموقع|صفحة|زر|كاميرا|جيتهاب|github|قاعدة|تكامل|ميزة|ملف|كود|نفسك|app|chat|ui|project|site|page|button|camera|database|integration|feature|file|code|yourself)/i;
   return verbs.test(s)&&(targets.test(s)||s.length<140);
+}
+
+export function looksLikeDeleteRequest(text){
+  return /(احذف|حذف|أزل|ازل|إزالة|امسح|delete|remove)/i.test(String(text||''));
 }
 
 export function looksLikeRollbackRequest(text){

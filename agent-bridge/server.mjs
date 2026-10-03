@@ -420,7 +420,8 @@ async function findHistoryRequest(requestId){
 async function applyFiles(body){
   const files=Array.isArray(body.files)?body.files:[];
   const edits=Array.isArray(body.edits)?body.edits:[];
-  if((!files.length&&!edits.length)||files.length+edits.length>16) throw new Error('invalid_changes');
+  const deletes=Array.isArray(body.deletes)?body.deletes:[];
+  if((!files.length&&!edits.length&&!deletes.length)||files.length+edits.length+deletes.length>20) throw new Error('invalid_changes');
 
   const requestId=String(body.request_id||'').trim().slice(0,96);
   if(requestId){
@@ -484,8 +485,22 @@ async function applyFiles(body){
       touched.push(rel);
     }
 
+    for(const item of deletes){
+      const rel=safeRepoPath(typeof item==='string'?item:item?.path);
+      await backup(rel);
+      const full=path.join(REPO,...rel.split('/'));
+      const stat=await fsp.stat(full).catch(()=>null);
+      if(!stat?.isFile()) throw new Error('delete_file_missing: '+rel);
+      await fsp.rm(full,{force:true});
+      touched.push(rel);
+    }
+
     const unique=[...new Set(touched)];
-    for(const rel of unique) await validateFile(rel);
+    for(const rel of unique){
+      const full=path.join(REPO,...rel.split('/'));
+      const stat=await fsp.stat(full).catch(()=>null);
+      if(stat?.isFile()) await validateFile(rel);
+    }
     await validateProject(unique);
     await git(['diff','--check']);
     await git(['add','--',...unique]);
