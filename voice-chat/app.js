@@ -234,6 +234,9 @@ pairCodeEl.addEventListener('keydown',e=>{
 });
 
 refreshBridge().catch(()=>setBridgeBadge(false,hasBridgeToken()));
+setInterval(()=>{
+  refreshBridge().catch(()=>setBridgeBadge(false,hasBridgeToken()));
+},15000);
 
 async function loadModel(mode='chat'){
   if(modelIdleTimer){
